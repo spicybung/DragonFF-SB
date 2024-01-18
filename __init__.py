@@ -21,13 +21,13 @@ from .ops import map_importer
 from bpy.utils import register_class, unregister_class
 
 bl_info = {
-    "name": "GTA DragonFF",
-    "author": "Parik",
+    "name": "GTA SAMP DragonFF",
+    "author": "Parik(fork by SpicyBung)",
     "version": (0, 0, 2),
     "blender": (2, 80, 0),
     "category": "Import-Export",
     "location": "File > Import/Export",
-    "description": "Importer and Exporter for GTA Formats"
+    "description": "Importer and Exporter for GTA SAMP Format"
 }
 
 
