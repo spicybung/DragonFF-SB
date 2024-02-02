@@ -4,6 +4,8 @@ DragonFF is a Blender Addon for import and export of GTA files.
 
 At the moment, only Renderware files are supported. Support for formats other than .dff is planned. 
 
+**NOTE:** This public beta release of my DragonFF fork is unstable, it only works for SAMP/open.mp.
+
 ## Supported Features
 
 The following is a list of supported features by the addon
