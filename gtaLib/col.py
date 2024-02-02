@@ -1,5 +1,6 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2024 SpicyBung
+# A fork of Pariks GTA DragonFF for Blender rewritten for SAMP(C)
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -289,14 +290,7 @@ class coll:
     def __read_col(self):
         model = ColModel()
         pos = self._pos
-        header_format = namedtuple("header_format",
-                                   [
-                                       "magic_number",
-                                       "file_size",
-                                       "model_name",
-                                       "model_id"
-                                   ]
-        )
+        header_format = namedtuple("header_format", ["magic_number", "file_size", "model_name", "model_id"])
         header = header_format._make(self.__read_struct("4sI22sH"))
 
         magic_number = header.magic_number.decode("ascii")
@@ -310,7 +304,8 @@ class coll:
             "COLL": 1,
             "COL2": 2,
             "COL3": 3,
-            "COL4": 4 # what version is this?
+            "COL4": 4, # this collision header seems to be for thin ridges in SA, but was unfinished
+            "COL3": 5,
         }
         
         try:
@@ -379,8 +374,9 @@ class coll:
 
         return data
 
-    #######################################################
-    def __write_col_new(self, model):
+    ########################################################
+    def __write_col_samp(self, model):
+        
         data = b''
 
         flags = 0
@@ -413,7 +409,7 @@ class coll:
         offsets.append(len(data) + header_len)
         data += self.__write_block(TFace, model.mesh_faces, False)
 
-        offsets.append(0) # Triangle Planes (what are these?)
+        offsets.append(0) # Triangle Planes (Bobby, h'what are these?)
         
         # Shadow Mesh
 
@@ -426,13 +422,13 @@ class coll:
                                            model.shadow_verts),
                                        False)
             
-            # Shadow Vertices
+            # Shadow Vertices           # (The original value for the header was incorrect - its too many bytes, what the heck) <BBHHxBBBBIIB
             offsets.append(len(data) + header_len)
             data += self.__write_block(TFace,
                                        model.shadow_faces,
                                        False)
 
-        # Write Header
+         # Write Header
         header_data = pack("<HHHBxIIIIIII",
                             len(model.spheres),
                             len(model.cubes),
@@ -440,6 +436,87 @@ class coll:
                             len(model.lines),
                             flags,
                             *offsets[:6])
+    
+
+        # Shadow Mesh (only after version 3)
+        if model.version >= '':
+            header_data += pack("<III", len(model.shadow_faces), *offsets[6:])
+
+        custom_header = bytes.fromhex("73 61 6D 70")
+        header_size = 24
+        header = [
+            ("COL" + str(model.version)).encode(
+                "ascii"
+            ),
+            len(data) + header_size,
+            custom_header,
+            model.model_id
+        ]
+
+        return header_data + custom_header + data
+
+    #######################################################
+    def __write_col_new(self, model):
+        data = b''
+
+        flags = 0
+        flags |= 2 if model.spheres or model.cubes or model.mesh_faces else 0
+        flags |= 16 if model.shadow_faces and model.version >= 3 else 0
+        
+        header_len = 104
+        header_len += 12 if model.version >= 3 else 0
+        header_len += 4 if model.version == 4 else 0
+
+        offsets = []
+        
+        # Spheres
+        offsets.append(len(data) + header_len)
+        data += self.__write_block(TSphere, model.spheres, False)
+
+        # Boxes
+        offsets.append(len(data) + header_len)
+        data += self.__write_block(TBox, model.cubes, False)
+
+        offsets.append(0) # TODO: Cones
+        
+        # Vertices
+        offsets.append(len(data) + header_len)
+        data += self.__write_block(TVertex,
+                                   Sections.compress_vertices(model.mesh_verts),
+                                   False)
+        
+        # Faces
+        offsets.append(len(data) + header_len)
+        data += self.__write_block(TFace, model.mesh_faces, False)
+
+        offsets.append(0) # Triangle Planes (Bobby, h'what are these?)
+        
+        # Shadow Mesh
+
+        if model.version >= 3:
+
+            # Shadow Vertices
+            offsets.append(len(data) + header_len)
+            data += self.__write_block(TVertex,
+                                       Sections.compress_vertices(
+                                           model.shadow_verts),
+                                       False)
+            
+            # Shadow Vertices           # (The original value for the header was incorrect - its too many bytes, what the heck) <BBHHxBBBBIIB
+            offsets.append(len(data) + header_len)
+            data += self.__write_block(TFace,
+                                       model.shadow_faces,
+                                       False)
+
+         # Write Header
+        header_data = pack("<HHHBxIIIIIII",
+                            len(model.spheres),
+                            len(model.cubes),
+                            len(model.mesh_faces),
+                            len(model.lines),
+                            flags,
+                            *offsets[:6])
+    
 
         # Shadow Mesh (only after version 3)
         if model.version >= 3:
@@ -449,7 +526,6 @@ class coll:
     
     #######################################################
     def __write_col(self, model):
-
         Sections.init_sections(model.version)
         
         if model.version == 1:
@@ -459,17 +535,22 @@ class coll:
             
         data = Sections.write_section(TBounds, model.bounds) + data
 
+        custom_header = bytes.fromhex("73 61 6D 70")
         header_size = 24
         header = [
-            ("COL" + ('L' if model.version == 1 else str(model.version))).encode(
+            ("COL" + ('3')).encode(
                 "ascii"
             ),
             len(data) + header_size,
-            model.model_name.encode("ascii"),
+            custom_header,
             model.model_id
         ]
+    
+             
+        
 
         return pack("4sI22sH", *header) + data
+    
             
     #######################################################
     def write_memory(self):
@@ -483,7 +564,7 @@ class coll:
             
     #######################################################
     def write_file(self, filename):
-
+        
         with open(filename, mode='wb') as file:
             content = self.write_memory()
             file.write(content)
