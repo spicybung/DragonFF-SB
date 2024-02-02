@@ -1,5 +1,6 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2024 SpicyBung
+# A fork of Pariks GTA DragonFF for Blender rewritten for SAMP(C)
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -102,9 +103,10 @@ types = {
     "Specular Material"       : 39056118,
     "2d Effect"               : 39056120,
     "Extra Vert Color"        : 39056121,
-    "Collision Model"         : 39056122,
+    "Collision Model"         : 39056127,   #SAMPs custom section ID
     "Reflection Material"     : 39056124,
     "Frame"                   : 39056126,
+    "SAMP Collision"          : 39056127,
 }
 
 #######################################################
@@ -2142,6 +2144,8 @@ class dff:
                 else:
                     self.pos += chunk.size
 
+            
+
     #######################################################
     def read_uv_anim_dict(self):
         chunk = self.read_chunk()
@@ -2180,6 +2184,7 @@ class dff:
         self.frame_list    = []
         self.geometry_list = []
         self.collisions    = []
+        self.samp          = []
         self.atomic_list   = []
         self.uvanim_dict   = []
         self.light_list    = []
