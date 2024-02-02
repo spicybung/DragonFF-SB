@@ -6,7 +6,7 @@ At the moment, only Renderware files are supported. Support for formats other th
 
 **NOTE:** If you find this fork ahead of time, bravo. Have fun.
 
-**DOUBLE NOTE:** This public beta release of my DragonFF fork is unstable, it only works for SAMP/open.mp.
+**DOUBLE NOTE:** This public beta release of my DragonFF fork is unstable and mainly for conceptual purposes, it only works for SAMP/open.mp.
 
 ## Supported Features
 
