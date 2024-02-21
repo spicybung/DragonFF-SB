@@ -535,17 +535,16 @@ class coll:
             
         data = Sections.write_section(TBounds, model.bounds) + data
 
-        custom_header = bytes.fromhex("73 61 6D 70")
+        samp_header = "samp"
         header_size = 24
         header = [
-            ("COL" + ('3')).encode(
+            ("COL" + (str(model.version))).encode(
                 "ascii"
             ),
             len(data) + header_size,
-            custom_header,
+            samp_header.encode("ascii"),
             model.model_id
         ]
-    
              
         
 
