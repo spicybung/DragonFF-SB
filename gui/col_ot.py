@@ -7,7 +7,7 @@ class EXPORT_OT_col(bpy.types.Operator, ExportHelper):
     
     bl_idname      = "export_col.scene"
     bl_description = "Export a GTA III/VC/SA Collision File"
-    bl_label       = "DragonFF Collision (.col)"
+    bl_label       = "DemonFF Collision (.col)"
     filename_ext   = ".col"
 
     filepath       : bpy.props.StringProperty(name="File path",
@@ -30,9 +30,8 @@ class EXPORT_OT_col(bpy.types.Operator, ExportHelper):
     export_version  : bpy.props.EnumProperty(
         items =
         (
-            ('1', "GTA 3/VC (COLL)", "Grand Theft Auto 3 and Vice City (PC) - Version 1"),
-            ('3', "GTA SA PC/Xbox (COL3)", "Grand Theft Auto SA (PC/Xbox) - Version 3"),
-            ('2', "GTA SA PS2 (COL2)", "Grand Theft Auto SA (PS2) - Version 2")
+            ('3', "GTA SAMP PC/Android (COL3)", "Grand Theft Auto SAMP (PC/Android) - Version 5"),
+
         ),
         name = "Version Export"
     )
@@ -59,14 +58,14 @@ class EXPORT_OT_col(bpy.types.Operator, ExportHelper):
         )
 
         # Save settings of the export in scene custom properties for later
-        context.scene['dragonff_imported_version_col'] = self.export_version
+        context.scene['demonff_imported_version_col'] = self.export_version
             
         return {'FINISHED'}
 
     #######################################################
     def invoke(self, context, event):
-        if 'dragonff_imported_version_col' in context.scene:
-            self.export_version = context.scene['dragonff_imported_version_col']
+        if 'demonff_imported_version_col' in context.scene:
+            self.export_version = context.scene['demonff_imported_version_col']
         
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}

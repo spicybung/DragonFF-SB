@@ -10,7 +10,7 @@ class EXPORT_OT_dff(bpy.types.Operator, ExportHelper):
     
     bl_idname           = "export_dff.scene"
     bl_description      = "Export a Renderware DFF or COL File"
-    bl_label            = "DragonFF DFF (.dff)"
+    bl_label            = "DemonFF DFF (.dff)"
     filename_ext        = ".dff"
 
     filepath            : bpy.props.StringProperty(name="File path",
@@ -54,8 +54,6 @@ class EXPORT_OT_dff(bpy.types.Operator, ExportHelper):
     export_version      : bpy.props.EnumProperty(
         items =
         (
-            ('0x33002', "GTA 3 (v3.3.0.2)", "Grand Theft Auto 3 PC (v3.3.0.2)"),
-            ('0x34003', "GTA VC (v3.4.0.3)", "Grand Theft Auto VC PC (v3.4.0.3)"),
             ('0x36003', "GTA SA (v3.6.0.3)", "Grand Theft Auto SA PC (v3.6.0.3)"),
             ('custom', "Custom", "Custom RW Version")
         ),
@@ -148,17 +146,17 @@ class EXPORT_OT_dff(bpy.types.Operator, ExportHelper):
             self.report({"ERROR"}, str(e))
 
         # Save settings of the export in scene custom properties for later
-        context.scene['dragonff_imported_version'] = self.export_version
-        context.scene['dragonff_custom_version']   = self.custom_version
+        context.scene['demonff_imported_version'] = self.export_version
+        context.scene['demonff_custom_version']   = self.custom_version
             
         return {'FINISHED'}
 
     #######################################################
     def invoke(self, context, event):
-        if 'dragonff_imported_version' in context.scene:
-            self.export_version = context.scene['dragonff_imported_version']
-        if 'dragonff_custom_version' in context.scene:
-            self.custom_version = context.scene['dragonff_custom_version']
+        if 'demonff_imported_version' in context.scene:
+            self.export_version = context.scene['demonff_imported_version']
+        if 'demonff_custom_version' in context.scene:
+            self.custom_version = context.scene['demonff_custom_version']
         
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -168,7 +166,7 @@ class IMPORT_OT_dff(bpy.types.Operator, ImportHelper):
     
     bl_idname      = "import_scene.dff"
     bl_description = 'Import a Renderware DFF or COL File'
-    bl_label       = "DragonFF DFF (.dff)"
+    bl_label       = "DemonFF DFF (.dff)"
 
     filter_glob   : bpy.props.StringProperty(default="*.dff;*.col",
                                               options={'HIDDEN'})
@@ -294,10 +292,10 @@ class IMPORT_OT_dff(bpy.types.Operator, ImportHelper):
 
                 # Set imported version to scene settings for use later in export.
                 if version in ['0x33002', '0x34003', '0x36003']:
-                    context.scene['dragonff_imported_version'] = version
+                    context.scene['demonff_imported_version'] = version
                 else:
-                    context.scene['dragonff_imported_version'] = "custom"
-                    context.scene['dragonff_custom_version'] = "{}.{}.{}.{}".format(
+                    context.scene['demonff_imported_version'] = "custom"
+                    context.scene['demonff_custom_version'] = "{}.{}.{}.{}".format(
                         *(version[i] for i in [2,3,4,6])
                     ) #convert hex to x.x.x.x format
                 
