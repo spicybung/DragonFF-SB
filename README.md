@@ -1,64 +1,53 @@
-# DragonFF 🐉
+# DemonFF 👹
 
-DragonFF is a Blender Addon for import and export of GTA files. 
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-At the moment, only Renderware files are supported. Support for formats other than .dff is planned. 
+## Introduction
 
-**NOTE:** If you find this fork ahead of time, bravo. Have fun.
+DemonFF is a Blender addon designed to provide ease of mind by providing SA-MP functionality to Parik27s DragonFF for working with Renderware DFF files. Whether you're creating custom models or working with GTA game assets, DemonFF simplifies the process of exporting and importing DFF files.
 
-**DOUBLE NOTE:** This public beta release of my DragonFF fork is unstable and mainly for conceptual purposes, it only works for SAMP/open.mp.
+What is a .DFF?: DFF files house object data, and are used by Renderware, as well as Rockstar itself up in most of its games since Grand Theft Auto III, until at least Grand Theft Auto IV. You'll find .DFF(Dive File Format) files in every 3D Universe GTA game you can think of. It houses the data structure for models such as buildings(has collision, mesh faces), or a "texture" of a spray tag on the side of a building(which may really be a model with empty collision, if it's not UV Mapped). .DFF files house the objects data which includes model ID, name, textures, collision, 2dfx, etc. As you can see, they're quite important.
 
-## Supported Features
+**Note:** DemonFF is a fork of Pariks GTA DragonFF, with additions and small rewrites.
 
-The following is a list of supported features by the addon
+## Features
 
-#### File Types
+- **Renderware Compatibility**: DemonFF is tailored to work seamlessly with Renderware DFF files, offering support for various versions and features.
 
-- [X] Model files
-- [ ] Texture Files
-- [X] Collision files (including the ones packed in dff)
-  - [X] Import
-  - [X] Export *(Partial)*
-- [ ] Map files (.ipl, .ide)
-  - [X] Import *(Partial, experimental)*
-  - [ ] Export
-- [ ] Animation files
+- **Blender Integration**: Integrate DemonFF directly into Blender, making it an integral part of your modeling and animation workflow.
 
-#### Model Features
+- **Export and Import**: Easily export your Blender models to DFF format and import existing DFF files into Blender for further editing.
 
-- [X] Skinned mesh support
-- [X] Multiple UV Maps
-- [X] Mass export
-- [X] Material Effects
-  - [X] Environment/Normal Maps
-  - [ ] Dual Textures
-  - [X] UV Animation
-- [X] Rockstar Specular and Reflection Extensions
-- [ ] 2D Effects
+- **Collision Editing**: Streamline collision model editing with DemonFF's dedicated tools for managing spheres, boxes, vertices, and faces.
 
-## Installation
+- **Custom Section IDs**: DemonFF supports Rockstar's custom section IDs, allowing you to work with specific RW plugins seamlessly.
 
-1. [Download](https://github.com/Parik27/DragonFF/archive/refs/heads/master.zip) the addon zip file from the latest master branch
-2. Import the downloaded .zip file by selecting it from *(User) Preferences/Addons/Install from File*
-3. Set the addon "GTA DragonFF" to enabled
-4. Import dff from Import tab or an IPL/IFP from the panel in *Scene Settings*
+- **SAMP/open.mp Compatibility**: DemonFF is designed for compatibility with San Andreas Multiplayer (SAMP) and open.mp, allowing you to export models and collision for use in multiplayer environments.
 
-## Python Module
+## Getting Started
 
-The python scripts have been designed with reusability in mind. As of now, the dff module is standalone, and can be used with any other Python instance without the need for Blender API.
+### Installation
 
-#### Standalone Modules
+1. Download the latest release from the [Releases](https://github.com/spicybung/DemonFF/releases) page.
+2. In Blender, go to `Edit -> Preferences -> Add-ons`.
+3. Click `Install` and select the downloaded ZIP file.
+4. Enable DemonFF from the list of installed addons.
 
-* [X] - DFF - `dff.py`
-* [ ] - TXD - `txd.py`
-* [X] - COL - `col.py`
-* [X] - IPL/IDE - `map.py` (partial, experimental)
-* [ ] - IFP - `ifp.py`
+### Usage
 
-#### Contributors
+1. Open Blender and navigate to the DemonFF panel.
+2. Import or create your 3D model.
+3. Use DemonFF tools to edit collision models, export, and import DFF files.
 
-The following have contributed significantly to the project:
+## License
 
-* [swift502](https://github.com/swift502) - For the map importer.
-* [Psycrow101](https://github.com/Psycrow101) - For delta morphs importer.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Acknowledgments
+
+- Special thanks to the Blender community and contributors.
+- Inspired by the Renderware engine and GTA modding community.
+- Parik27 for his DragonFF Blender Add-on, which without would have made this impossible.
+
+
+---
