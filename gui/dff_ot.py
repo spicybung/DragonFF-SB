@@ -54,9 +54,7 @@ class EXPORT_OT_dff(bpy.types.Operator, ExportHelper):
     export_version      : bpy.props.EnumProperty(
         items =
         (
-            ('0x33002', "GTA 3 (v3.3.0.2)", "Grand Theft Auto 3 PC (v3.3.0.2)"),
-            ('0x34003', "GTA VC (v3.4.0.3)", "Grand Theft Auto VC PC (v3.4.0.3)"),
-            ('0x36003', "GTA SA (v3.6.0.3)", "Grand Theft Auto SA PC (v3.6.0.3)"),
+            ('0x36003', "GTA SAMP (v3.6.0.3)", "Grand Theft Auto SA PC/Android (v3.6.0.3)"),
             ('custom', "Custom", "Custom RW Version")
         ),
         name = "Version Export"
