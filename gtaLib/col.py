@@ -459,15 +459,17 @@ class coll:
             
         data = Sections.write_section(TBounds, model.bounds) + data
 
+        samp_header = "samp"
         header_size = 24
         header = [
-            ("COL" + ('L' if model.version == 1 else str(model.version))).encode(
+            ("COL" + (str(model.version))).encode(
                 "ascii"
             ),
             len(data) + header_size,
-            model.model_name.encode("ascii"),
+            samp_header.encode("ascii"),
             model.model_id
         ]
+             
 
         return pack("4sI22sH", *header) + data
             
