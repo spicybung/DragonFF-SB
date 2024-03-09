@@ -4,9 +4,9 @@
 
 ## Introduction
 
-DemonFF is a powerful Blender addon designed to enhance your workflow by providing advanced features for working with Renderware DFF files. Whether you're creating custom models or working with GTA game assets, DemonFF simplifies the process of exporting and importing DFF files.
+DemonFF is a fork of DragonFF which is designed to help you work with models for SA-MP/open.mp 
 
-**Note:** DemonFF is a fork of Pariks GTA DragonFF, with significant rewrites.
+**Note:** DemonFF is a fork of Parik27's GTA DragonFF, with compatibility for SAMP/open.mp
 
 ## Features
 
