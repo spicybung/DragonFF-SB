@@ -1,5 +1,8 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2025 SpicyBung
+
+# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,6 +25,7 @@ import os.path
 from collections import defaultdict
 
 from ..gtaLib import dff
+from ..ops.ext_2dfx_exporter import ext_2dfx_exporter
 from .col_exporter import export_col
 
 #######################################################
@@ -275,15 +279,19 @@ class DffExportException(Exception):
 class dff_exporter:
 
     selected = False
+    preserve_positions = True
+    preserve_rotations = True
     mass_export = False
     file_name = ""
     dff = None
     version = None
-    frames = {}
+    frame_objects = {}
     bones = {}
     parent_queue = {}
     collection = None
     export_coll = False
+    col_brightness = 1.0
+    col_light = 1.0 
 
     #######################################################
     @staticmethod
@@ -292,10 +300,19 @@ class dff_exporter:
         if bpy.app.version < (2, 80, 0):
             return a * b
         return a @ b
+    #######################################################    
+    @staticmethod
+    def get_object_parent(obj):
+        if type(obj) is bpy.types.Object and obj.parent_bone:
+            parent = obj.parent.data.bones.get(obj.parent_bone)
+            if parent:
+                return parent
+
+        return obj.parent
     
     #######################################################
     @staticmethod
-    def create_frame(obj, append=True, set_parent=True):
+    def create_frame(obj, append=True, set_parent=True, matrix_local=None):
         self = dff_exporter
         
         frame       = dff.Frame()
@@ -304,47 +321,59 @@ class dff_exporter:
         # Get rid of everything before the last period
         if self.export_frame_names:
             frame.name = clear_extension(obj.name)
+            if self.truncate_frame_names:
+                frame.name = truncate_frame_name(frame.name)  # Apply truncation
 
         # Is obj a bone?
         is_bone = type(obj) is bpy.types.Bone
 
-        # Scan parent queue
-        for name in self.parent_queue:
-            if name == obj.name:
-                index = self.parent_queue[name]
-                self.dff.frame_list[index].parent = frame_index
-
-        matrix = obj.matrix_local
+        matrix = matrix_local or obj.matrix_local
         if is_bone and obj.parent is not None:
             matrix = self.multiply_matrix(obj.parent.matrix_local.inverted(), matrix)
 
+        parent = self.get_object_parent(obj)
+
+        if is_bone or parent:
+            position = matrix.to_translation()
+            rotation_matrix = matrix.to_3x3().transposed()
+        else:
+            if self.preserve_positions:
+                position = matrix.to_translation()
+            else:
+                position = (0, 0, 0)
+
+            if self.preserve_rotations:
+                rotation_matrix = matrix.to_3x3().transposed()
+            else:
+                rotation_matrix = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+
         frame.creation_flags  =  0
         frame.parent          = -1
-        frame.position        = matrix.to_translation()
-        frame.rotation_matrix = dff.Matrix._make(
-            matrix.to_3x3().transposed()
-        )
+        frame.position        = position
+        frame.rotation_matrix = dff.Matrix._make(rotation_matrix)
 
         if "dff_user_data" in obj:
             frame.user_data = dff.UserData.from_mem(obj["dff_user_data"])
 
-        id_array = self.bones if is_bone else self.frames
-        
-        if set_parent and obj.parent is not None:
+        if set_parent and parent is not None:
 
-            if obj.parent.name not in id_array:
+            if parent not in self.frame_objects:
                 raise DffExportException(f"Failed to set parent for {obj.name} "
-                                         f"to {obj.parent.name}.")
-            
-            parent_frame_idx = id_array[obj.parent.name]
-            frame.parent = parent_frame_idx
+                                         f"to {parent.name}.")
 
-        id_array[obj.name] = frame_index
+            parent_frame_idx = self.frame_objects[parent]
+            frame.parent = parent_frame_idx
 
         if append:
             self.dff.frame_list.append(frame)
 
+        self.frame_objects[obj] = frame_index
         return frame
+    
+    #######################################################
+    @staticmethod
+    def get_last_frame_index():
+        return len(dff_exporter.dff.frame_list) - 1
 
     #######################################################
     @staticmethod
@@ -581,8 +610,7 @@ class dff_exporter:
     @staticmethod
     def convert_slinear_to_srgb (col):
         color = mathutils.Color (col[:3])
-        color_srgb = color.from_scene_linear_to_srgb()
-        return tuple(max(0, min(1, channel)) for channel in color_srgb) + (col[3],)  # Including alpha unchanged
+        return tuple(color.from_scene_linear_to_srgb ()) + (col[3],)
 
     #######################################################
     @staticmethod
@@ -623,14 +651,13 @@ class dff_exporter:
         self = dff_exporter
 
         mesh = self.convert_to_mesh(obj)
-
         self.triangulate_mesh(mesh)
-        # NOTE: Mesh.calc_normals is no longer needed and has been removed
-        if bpy.app.version < (4, 0, 0):
-            mesh.calc_normals()
-        mesh.calc_normals_split()
 
-        vcols = self.get_vertex_colors (mesh)
+        # Ensure compatibility with Blender versions
+        if bpy.app.version < (4, 0, 0) and hasattr(mesh, 'calc_loop_triangles'):
+            mesh.calc_loop_triangles()
+
+        vcols = self.get_vertex_colors(mesh)
         verts_indices = {}
         vertices_list = []
         faces_list = []
@@ -638,9 +665,10 @@ class dff_exporter:
         skin_plg, bone_groups = self.get_skin_plg_and_bone_groups(obj, mesh)
         dm_entries = self.get_delta_morph_entries(obj, mesh)
 
-        # Check for vertices once before exporting to report instanstly
+        # Clamp vertices if they exceed the limit
         if len(mesh.vertices) > 0xFFFF:
-            raise DffExportException(f"Too many vertices in mesh ({obj.name}): {len(mesh.vertices)}/65535")
+            print(f"Clamping vertices in mesh ({obj.name}). Too many vertices: {len(mesh.vertices)}/65535")
+            mesh = self.clamp_mesh_vertices(mesh)
 
         for polygon in mesh.polygons:
             face = {"verts": [], "mat_idx": polygon.material_index}
@@ -660,7 +688,6 @@ class dff_exporter:
                     vert_cols.append(vert_col[loop_index])
 
                 for group in vertex.groups:
-                    # Only upto 4 vertices per group are supported
                     if len(bones) >= 4:
                         break
 
@@ -672,35 +699,65 @@ class dff_exporter:
                         sk_cos.append(kb.data[loop.vertex_index].co)
 
                 key = (loop.vertex_index,
-                       tuple(loop.normal),
-                       tuple(tuple(uv) for uv in uvs))
+                    tuple(loop.normal),
+                    tuple(tuple(uv) for uv in uvs))
 
                 normal = loop.normal if obj.dff.export_split_normals else vertex.normal
 
                 if key not in verts_indices:
-                    face['verts'].append (len(vertices_list))
+                    face['verts'].append(len(vertices_list))
                     verts_indices[key] = len(vertices_list)
                     vertices_list.append({"idx": loop.vertex_index,
-                                          "co": vertex.co,
-                                          "normal": normal,
-                                          "uvs": uvs,
-                                          "vert_cols": vert_cols,
-                                          "bones": bones,
-                                          "sk_cos": sk_cos})
+                                        "co": vertex.co,
+                                        "normal": normal,
+                                        "uvs": uvs,
+                                        "vert_cols": vert_cols,
+                                        "bones": bones,
+                                        "sk_cos": sk_cos})
                 else:
-                    face['verts'].append (verts_indices[key])
+                    face['verts'].append(verts_indices[key])
 
             faces_list.append(face)
 
-        # Check vertices count again since duplicate vertices may have increased
-        # vertices count above the limit
+        # Check vertices count after deduplication and clamp if necessary
         if len(vertices_list) > 0xFFFF:
-            raise DffExportException(f"Too many vertices in mesh ({obj.name}): {len(vertices_list)}/65535")
+            print(f"Clamping deduplicated vertices in mesh ({obj.name}). Too many vertices: {len(vertices_list)}/65535")
+            vertices_list = vertices_list[:0xFFFF]
+            faces_list = self.clamp_faces_to_vertices(faces_list, len(vertices_list))
 
         self.populate_geometry_from_vertices_data(
             vertices_list, skin_plg, dm_entries, mesh, obj, geometry, len(vcols))
 
         self.populate_geometry_from_faces_data(faces_list, geometry)
+
+    #######################################################
+    @staticmethod
+    def clamp_mesh_vertices(mesh):
+        """
+        Clamps vertices to the first 65535.
+        """
+        new_mesh = mesh.copy()
+        new_mesh.vertices.foreach_set('select', [False] * len(new_mesh.vertices))  # Deselect all vertices
+
+        for i in range(65535):
+            new_mesh.vertices[i].select = True
+
+        # Return clamped mesh
+        return new_mesh
+
+    #######################################################
+    @staticmethod
+    def clamp_faces_to_vertices(faces_list, max_vertices):
+        """
+        Clamps faces to use vertices within the max_vertices range.
+        """
+        clamped_faces = []
+        for face in faces_list:
+            clamped_verts = [v for v in face['verts'] if v < max_vertices]
+            if len(clamped_verts) == len(face['verts']):
+                clamped_faces.append(face)  # Only add if all vertices are within range
+        return clamped_faces
+
         
     
     #######################################################
@@ -745,19 +802,31 @@ class dff_exporter:
         return mesh
     
     #######################################################
-    def populate_atomic(obj):
+    def populate_atomic(obj, frame_index=None):
         self = dff_exporter
 
-        # Get armature
-        armature = None
-        for modifier in obj.modifiers:
-            if modifier.type == 'ARMATURE':
-                armature = modifier.object
+        # Get frame index from parent
+        if frame_index is None:
+            parent = self.get_object_parent(obj)
+            if parent:
+                frame_index = self.frame_objects.get(parent)
+
+        # Get frame index from armature modifier
+        if frame_index is None:
+            for modifier in obj.modifiers:
+                if modifier.type == 'ARMATURE':
+                    frame_index = self.frame_objects.get(modifier.object)
+                    if frame_index is not None:
+                        break
+
+        # Create new frame if there is no parent
+        if frame_index is None:
+            self.create_frame(obj, set_parent=False)
+            frame_index = self.get_last_frame_index()
 
         # Create geometry
         geometry = dff.Geometry()
         self.populate_geometry_with_mesh_data (obj, geometry)
-        self.create_frame(obj, True, obj.parent != armature)
 
         # Bounding sphere
         sphere_center = 0.125 * sum(
@@ -765,8 +834,8 @@ class dff_exporter:
             mathutils.Vector()
         )
         sphere_center = self.multiply_matrix(obj.matrix_world, sphere_center)
-        sphere_radius = 1.732 * max(*obj.dimensions) / 2        
-        
+        sphere_radius = 1.732 * max(*obj.dimensions) / 2
+
         geometry.bounding_sphere = dff.Sphere._make(
             list(sphere_center) + [sphere_radius]
         )
@@ -778,39 +847,38 @@ class dff_exporter:
         geometry.export_flags['write_mesh_plg'] = obj.dff.export_binsplit
         geometry.export_flags['light'] = obj.dff.light
         geometry.export_flags['modulate_color'] = obj.dff.modulate_color
-        geometry.export_flags['triangle_strip'] = obj.dff.triangle_strip
+
         
         if "dff_user_data" in obj.data:
             geometry.extensions['user_data'] = dff.UserData.from_mem(
                 obj.data['dff_user_data'])
 
+        # Add Geometry to list
+        self.dff.geometry_list.append(geometry)
+
+        # Create Atomic from geometry and frame
+        atomic          = dff.Atomic('frame', 'geometry', 'flags', 'unk')
+        atomic.frame    = frame_index
+        atomic.geometry = len(self.dff.geometry_list) - 1
+        atomic.flags    = 0x4
+
         try:
             if obj.dff.pipeline != 'NONE':
                 if obj.dff.pipeline == 'CUSTOM':
-                    geometry.pipeline = int(obj.dff.custom_pipeline, 0)
+                    atomic.extensions['pipeline'] = int(obj.dff.custom_pipeline, 0)
                 else:
-                    geometry.pipeline = int(obj.dff.pipeline, 0)
-                    
+                    atomic.extensions['pipeline'] = int(obj.dff.pipeline, 0)
+
         except ValueError:
             print("Invalid (Custom) Pipeline")
-            
-        # Add Geometry to list
-        self.dff.geometry_list.append(geometry)
-        
-        # Create Atomic from geometry and frame
-        geometry_index = len(self.dff.geometry_list) - 1
-        frame_index    = len(self.dff.frame_list) - 1
-        atomic         = dff.Atomic._make((frame_index,
-                                           geometry_index,
-                                           0x4,
-                                           0
-        ))
+
+        if "skin" in geometry.extensions:
+            right_to_render = dff.RightToRender._make((0x0116,
+                obj.dff.right_to_render
+            ))
+            atomic.extensions['right_to_render'] = right_to_render
+
         self.dff.atomic_list.append(atomic)
-
-        # Export armature
-        if armature is not None:
-            self.export_armature(armature, obj)
-
 
     #######################################################
     @staticmethod
@@ -897,47 +965,105 @@ class dff_exporter:
             )
             frame.bone_data = bone_data
             self.dff.frame_list.append(frame)
+    #######################################################
+    def truncate_frame_name(name):
+        """Truncates the frame name to <24 bytes to leave space for null termination."""
+        name_bytes = name.encode('utf-8')
+        if len(name_bytes) > 24:
+            return name_bytes[:22].decode('utf-8', 'ignore')  # Truncate to <24 bytes
+        return name
+    #######################################################
+    @staticmethod
+    def export_empty(obj):
+        self = dff_exporter
+
+        parent = self.get_object_parent(obj)
+        set_parent = False
+        matrix_local = None
+
+        if parent in self.frame_objects:
+            set_parent = True
+            if obj.parent_type == "BONE":
+                matrix_local = obj.matrix_basis
+
+        # Create new frame
+        self.create_frame(obj, set_parent=set_parent, matrix_local=matrix_local)
 
     #######################################################
     @staticmethod
     def export_objects(objects, name=None):
         self = dff_exporter
-        
+
         self.dff = dff.dff()
 
         # Skip empty collections
         if len(objects) < 1:
             return
-        
+
+        atomics_data = []
+
         for obj in objects:
+
+            # We can just ignore collision meshes here as the DFF exporter will still look for
+            # them in their own nested collection later if export_coll is true.
+            if obj.dff.type != 'OBJ':
+                continue
 
             # create atomic in this case
             if obj.type == "MESH":
-                self.populate_atomic(obj)
+                frame_index = None
+                # create an empty frame
+                if obj.dff.is_frame:
+                    self.export_empty(obj)
+                    frame_index = self.get_last_frame_index()
+                atomics_data.append((obj, frame_index))
 
             # create an empty frame
             elif obj.type == "EMPTY":
-                self.create_frame(obj)
-        
+                self.export_empty(obj)
+
+            elif obj.type == "ARMATURE":
+                self.export_armature(obj)
+
+        atomics_data = sorted(atomics_data, key=lambda a: a[0].dff.atomic_index)
+
+        for mesh, frame_index in atomics_data:
+            self.populate_atomic(mesh, frame_index)
+
+        # 2DFX
+        ext_2dfx_exporter(self.dff.ext_2dfx).export_objects(objects)
+
         # Collision
         if self.export_coll:
             mem = export_col({
-                'file_name'     : name if name is not None else
-                               os.path.basename(self.file_name),
-                'memory'        : True,
+                'file_name'     : None,
                 'version'       : 3,
+                'memory'        : True,
                 'collection'    : self.collection,
                 'only_selected' : self.selected,
-                'mass_export'   : False
+                'mass_export'   : False,
+                'col_brightness': col_brightness,
+                'col_light'     : col_light
             })
 
             if len(mem) != 0:
-               self.dff.collisions = [mem] 
+                self.dff.collisions = [mem]
+
+        # Use per-object collision values if exist, or fallback gracefully
+        if hasattr(obj, "dff"):
+            col_brightness = getattr(obj.dff, "col_brightness", self.col_brightness)
+            col_light = getattr(obj.dff, "col_light", self.col_light)
+        else:
+            col_brightness = self.col_brightness
+            col_light = self.col_light
 
         if name is None:
             self.dff.write_file(self.file_name, self.version )
         else:
-            self.dff.write_file("%s/%s" % (self.path, name), self.version)
+            filename = "%s/%s" % (self.path, name)
+            if not filename.endswith('.dff'):
+                filename += '.dff'
+            self.dff.write_file(filename, self.version)
 
     #######################################################
     @staticmethod
@@ -985,13 +1111,23 @@ class dff_exporter:
                 
 #######################################################
 def export_dff(options):
-
-    # Shadow Function
-    dff_exporter.selected           = options['selected']
+    # Setup options for export without changing directory structures
+    dff_exporter.selected = options['selected']
     dff_exporter.export_frame_names = options['export_frame_names']
-    dff_exporter.mass_export        = options['mass_export']
-    dff_exporter.path               = options['directory']
-    dff_exporter.version            = options['version']
-    dff_exporter.export_coll        = options['export_coll']
+    dff_exporter.truncate_frame_names = options.get('truncate_frame_names', False)
+    dff_exporter.mass_export = options['mass_export']
+    dff_exporter.preserve_positions = options['preserve_positions']
+    dff_exporter.preserve_rotations = options['preserve_rotations']
+    dff_exporter.path = options['directory']
+    dff_exporter.version = options['version']
+    dff_exporter.export_coll = options['export_coll']
 
-    dff_exporter.export_dff(options['file_name'])
+    # Normalize and attempt forced read on file path without directory checks
+    file_path = os.path.normpath(options['file_name'])
+
+    try:
+        # Bypass directory check and attempt to read directly
+        dff_exporter.export_dff(file_path)
+    except FileNotFoundError:
+        # Provide a clear notice for a missing file
+        print(f"Path '{file_path}' could not be accessed. Ensure file and directory are accessible.")

@@ -1,5 +1,8 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2025 SpicyBung
+
+# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,45 +24,18 @@ import math
 import mathutils
 
 from ..gtaLib import dff
+from ..gtaLib.dff import entries
 from .importer_common import (
     link_object, create_collection,
     material_helper, set_object_mode,
     hide_object)
 from .col_importer import import_col_mem
 
-#######################################################
-class ext_2dfx_importer:
+from ..gui.tdfx_ot import add_light_info
 
-    """ Helper class for 2dfx importing """
-    # Basically I didn't want to have such functions in
-    # the main dfff_importer, as the functions wouldn't
-    # make any sense being there.
-    
-    #######################################################
-    def __init__(self, effects):
-        self.effects = effects
+from ..ops.ext_2dfx_importer import ext_2dfx_importer
 
-    #######################################################
-    def import_light(self, entry):
-        pass
-    
-    #######################################################
-    def get_objects(self):
 
-        """ Import and return the list of imported objects """
-
-        functions = {
-            0: self.import_light
-        }
-
-        objects = []
-        
-        for entry in self.effects.entries:
-            if entry.effect_id in functions:
-                objects.append(functions[entry.effect_id](entry))
-
-        return objects
-    
 #######################################################
 class dff_importer:
 
@@ -126,7 +102,6 @@ class dff_importer:
             mesh['dragon_light'] = (geom.flags & dff.rpGEOMETRYLIGHT) != 0
             mesh['dragon_modulate_color'] = \
                 (geom.flags & dff.rpGEOMETRYMODULATEMATERIALCOLOR) != 0
-            mesh['dragon_triangle_strip'] = (geom.flags & dff.rpGEOMETRYTRISTRIP) != 0
 
             uv_layers = []
             
@@ -271,11 +246,6 @@ class dff_importer:
             empty.empty_display_size = 0.05
         pass
 
-    ##################################################################
-    def import_2dfx(self, effects):
-        
-        for effect in effects.entries:
-            pass
 
     ##################################################################
     def generate_material_name(material, fallback):
@@ -628,7 +598,21 @@ class dff_importer:
             modifier.use_edge_angle = False
             
             bm.to_mesh(self.meshes[frame])
-                
+    
+    # Example usage
+    def process_2dfx_lights(data, offset, context):
+        """
+        Process 2DFX lights and call add_light_info for each parsed LightEntry.
+        """
+        # Read and parse the 2DFX entries
+        entries = dff_instance.read_2dfx(data, offset, context)
+
+        # Process each LightEntry
+        for i, entry in enumerate(entries):
+            print(f"Processing Light Entry {i + 1}/{len(entries)}...")
+            add_light_info(context, entry)
+
+
     #######################################################
     def import_frames():
         self = dff_importer
@@ -692,7 +676,6 @@ class dff_importer:
                     obj.dff.export_normals = mesh['dragon_normals']
                     obj.dff.light          = mesh['dragon_light']
                     obj.dff.modulate_color = mesh['dragon_modulate_color']
-                    obj.dff.triangle_strip = mesh['dragon_triangle_strip']
 
                     if obj.dff.pipeline == 'CUSTOM':
                         obj.dff.custom_pipeline = mesh['dragon_cust_pipeline']
@@ -703,16 +686,11 @@ class dff_importer:
                     del mesh['dragon_cust_pipeline' ]
                     del mesh['dragon_light'         ]
                     del mesh['dragon_modulate_color']
-                    del mesh['dragon_triangle_strip']
                     
                 # Set vertex groups
                 if index in self.skin_data:
                     self.set_vertex_groups(obj, self.skin_data[index])
             
-            # set parent
-            # Note: I have not considered if frames could have parents
-            # that have not yet been defined. If I come across such
-            # a model, the code will be modified to support that
 
             if  frame.parent != -1:
                 obj.parent = self.objects[frame.parent]
@@ -745,7 +723,6 @@ class dff_importer:
 
         if self.remove_doubles:
             self.remove_object_doubles()
-
     #######################################################
     def preprocess_atomics():
         self = dff_importer
@@ -776,7 +753,14 @@ class dff_importer:
                     _atomic[0] = index # _atomic.frame = index
                     self.dff.atomic_list[atomic] = dff.Atomic(*_atomic)
                     break
-                    
+    #######################################################
+    def import_2dfx():
+        self = dff_importer
+
+        importer = ext_2dfx_importer(self.dff.ext_2dfx)
+
+        for obj in importer.get_objects():
+            link_object(obj, self.current_collection)               
             
     #######################################################
     def import_dff(file_name):
@@ -787,6 +771,10 @@ class dff_importer:
         self.dff = dff.dff()
         self.dff.load_file(file_name)
         self.file_name = file_name
+        # Check for and process the 2DFX extension
+        if self.dff.ext_2dfx:  # Ensure ext_2dfx is populated
+            ext_importer = ext_2dfx_importer(self.dff.ext_2dfx)
+            ext_importer.get_objects()  # Process the 2DFX entries
 
         self.preprocess_atomics()
         
@@ -795,11 +783,11 @@ class dff_importer:
             os.path.basename(file_name)
         )
         
+
         self.import_atomics()
         self.import_frames()
-
-        # Set imported version
-        self.version = "0x%05x" % self.dff.rw_version
+        self.import_2dfx()
+        
         
         # Add collisions
         for collision in self.dff.collisions:
@@ -812,6 +800,8 @@ class dff_importer:
                     # Hide objects
                     for object in collection.objects:
                         hide_object(object)
+
+
 
 #######################################################
 def import_dff(options):
@@ -826,5 +816,4 @@ def import_dff(options):
 
     dff_importer.import_dff(options['file_name'])
 
-    return dff_importer
     return dff_importer

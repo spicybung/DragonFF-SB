@@ -23,9 +23,9 @@ import os
 import math
 import mathutils
 
-from ..gtaLib import col
+from ..gtaLib import col_samp
 
-class col_exporter:
+class col_samp_exporter:
 
     coll = None
     filename = "" # Whether it will return a bytes file (not write to a file), if no file name is specified
@@ -60,7 +60,7 @@ class col_exporter:
         for i, face in enumerate(bm.faces):
 
             # Face Groups
-            if layer and col.Sections.version > 1:
+            if layer and col_samp.Sections.version > 1:
                 lastface = i == len(bm.faces)-1
                 idx = face[layer]
 
@@ -76,7 +76,7 @@ class col_exporter:
                 # Create the face group if the face group index changed or this is the last face in the list
                 if idx != fg_idx or lastface:
                     end_idx = i if lastface else i-1
-                    face_groups.append(col.TFaceGroup._make([fg_min, fg_max, start_idx, end_idx]))
+                    face_groups.append(col_samp.TFaceGroup._make([fg_min, fg_max, start_idx, end_idx]))
                     fg_min = [256] * 3
                     fg_max = [-256] * 3
                     start_idx = i
@@ -86,23 +86,24 @@ class col_exporter:
             surface = [0, 0, 0, 0]
             try:
                 mat = obj.data.materials[face.material_index]
+                mat.dff.col_light = int(col_samp_exporter.col_light)
                 surface[0] = mat.dff.col_mat_index
                 surface[1] = mat.dff.col_flags
                 surface[2] = mat.dff.col_brightness
                 surface[3] = mat.dff.col_light
 
             except (IndexError, AttributeError):
-                pass
+                surface[3] = col_samp_exporter.col_light
 
-            if col.Sections.version == 1:
-                faces.append(col.TFace._make(
+            if col_samp.Sections.version == 1:
+                faces.append(col_samp.TFace._make(
                     [vert.index + vert_offset for vert in (face.verts[0], face.verts[2], face.verts[1])] + [
-                        col.TSurface(*surface)
+                        col_samp.TSurface(*surface)
                     ]
                 ))
 
             else:
-                faces.append(col.TFace._make(
+                faces.append(col_samp.TFace._make(
                     [vert.index + vert_offset for vert in (face.verts[0], face.verts[2], face.verts[1])] + [
                         surface[0], surface[3]
                     ]
@@ -115,7 +116,7 @@ class col_exporter:
         if obj.dff.type == 'SHA':
             return
 
-        self = col_exporter
+        self = col_samp_exporter
 
         if self.coll.bounds is None:
             self.coll.bounds = [
@@ -151,7 +152,7 @@ class col_exporter:
 
     #######################################################
     def _convert_bounds():
-        self = col_exporter
+        self = col_samp_exporter
 
         radius = 0.0
         center = [0, 0, 0]
@@ -166,9 +167,9 @@ class col_exporter:
                 mathutils.Vector(rect_min) - mathutils.Vector(rect_max)
             ).magnitude / 2
 
-        self.coll.bounds = col.TBounds(max = col.TVector(*rect_min),
-                                       min = col.TVector(*rect_max),
-                                       center = col.TVector(*center),
+        self.coll.bounds = col_samp.TBounds(max = col_samp.TVector(*rect_min),
+                                       min = col_samp.TVector(*rect_max),
+                                       center = col_samp.TVector(*center),
                                        radius = radius
         )   
         
@@ -176,18 +177,18 @@ class col_exporter:
         
     #######################################################
     def _process_spheres(obj):
-        self = col_exporter
+        self = col_samp_exporter
         
         radius = max(x * obj.empty_display_size for x in obj.scale)
-        centre = col.TVector(*obj.location)
-        surface = col.TSurface(
+        centre = col_samp.TVector(*obj.location)
+        surface = col_samp.TSurface(
             obj.dff.col_material,
             obj.dff.col_flags,
             obj.dff.col_brightness,
             obj.dff.col_light
         )
 
-        self.coll.spheres.append(col.TSphere(radius=radius,
+        self.coll.spheres.append(col_samp.TSphere(radius=radius,
                                          surface=surface,
                                          center=centre
         ))
@@ -196,19 +197,19 @@ class col_exporter:
                 
     #######################################################
     def _process_boxes(obj):
-        self = col_exporter
+        self = col_samp_exporter
 
-        min = col.TVector(*(obj.location - obj.scale))
-        max = col.TVector(*(obj.location + obj.scale))
+        min = col_samp.TVector(*(obj.location - obj.scale))
+        max = col_samp.TVector(*(obj.location + obj.scale))
 
-        surface = col.TSurface(
+        surface = col_samp.TSurface(
             obj.dff.col_material,
             obj.dff.col_flags,
             obj.dff.col_brightness,
             obj.dff.col_light
         )
 
-        self.coll.boxes.append(col.TBox(min=min,
+        self.coll.boxes.append(col_samp.TBox(min=min,
                                         max=max,
                                         surface=surface,
         ))
@@ -217,7 +218,7 @@ class col_exporter:
 
     #######################################################
     def _process_obj(obj):
-        self = col_exporter
+        self = col_samp_exporter
         
         if obj.type == 'MESH':
             # Meshes
@@ -230,48 +231,44 @@ class col_exporter:
             else:
                 self._process_mesh(obj,
                                    self.coll.mesh_verts,
-                                   self.coll.mesh_faces,
-                                   self.coll.face_groups
+                                   self.coll.mesh_faces
                 )
                     
         elif obj.type == 'EMPTY':
-            if obj.empty_display_type == 'SPHERE':
-                self._process_spheres(obj)
-            else:
-                self._process_boxes(obj)
-
+            self._process_spheres(obj)
+        
         self._update_bounds(obj)
 
     #######################################################
-    def export_col(collection, name):
-        self = col_exporter
+    def export_col(name):
+        self = col_samp_exporter
+        self.file_name = name
 
-        col.Sections.init_sections(self.version)
+        col_samp.Sections.init_sections(self.version)
 
-        self.coll = col.ColModel()
+        self.coll = col_samp.ColModel()
         self.coll.version = self.version
         self.coll.model_name = os.path.basename(name)
 
-        bounds_found = False
-
-        # Get original import bounds from collection (some collisions come in as just bounds with no other items)
-        if collection.get('bounds min') and collection.get('bounds max'):
-            bounds_found = True
-            self.coll.bounds = [collection['bounds min'], collection['bounds max']]
+        objects = bpy.data.objects
+        if self.collection is not None:
+            objects = self.collection.objects
 
         total_objects = 0
-        for obj in collection.objects:
+        for obj in objects:
             if obj.dff.type == 'COL' or obj.dff.type == 'SHA':
                 if not self.only_selected or obj.select_get():
                     self._process_obj(obj)
                     total_objects += 1
-
+                
         self._convert_bounds()
-
-        if total_objects == 0 and (col_exporter.only_selected or not bounds_found):
+        
+        if self.memory:
+            if total_objects > 0:
+                return col_samp.coll(self.coll).write_memory()
             return b''
 
-        return col.coll(self.coll).write_memory()
+        col_samp.coll(self.coll).write_file(name)
 
 #######################################################
 def get_col_collection_name(collection, parent_collection=None):
@@ -288,31 +285,55 @@ def get_col_collection_name(collection, parent_collection=None):
 
 #######################################################
 def export_col(options):
+    # Set exporter properties
+    col_samp_exporter.memory = options['memory']
+    col_samp_exporter.version = options['version']
+    col_samp_exporter.collection = options['collection']
+    col_samp_exporter.only_selected = options['only_selected']
 
-    col_exporter.version = options['version']
-    col_exporter.collection = options['collection']
-    col_exporter.only_selected = options['only_selected']
+    col_samp_exporter.col_brightness = options['col_brightness']
+    col_samp_exporter.col_light = options['col_light']
 
-    file_name = options['file_name']
-    output = b''
 
-    if not col_exporter.collection:
-        scene_collection = bpy.context.scene.collection
-        root_collections = scene_collection.children.values() + [scene_collection]
+    # If mass export mode is enabled
+    if options['mass_export']:
+        output = b''
+
+        root_collection = bpy.context.scene.collection
+        collections = list(root_collection.children) + [root_collection]
+        col_samp_exporter.memory = True  # To gather memory output per collection
+
+        # Ensure the directory path exists
+        base_dir = options['directory']
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+
+        # Process each collection
+        for collection in collections:
+            col_samp_exporter.collection = collection
+            name = collection.name
+
+            # Adjust the collection name for proper file naming
+            try:
+                name = name[name.index(".col") + len(".col"):]
+            except ValueError:
+                pass
+            
+            # Define the export path for each collection
+            export_path = os.path.join(base_dir, f"{name}.col")
+
+            # Perform the export and gather output if needed
+            collection_output = col_samp_exporter.export_col(name)
+            output += collection_output
+
+            # Write each collection's output to its respective file
+            with open(export_path, mode='wb') as file:
+                file.write(collection_output)
+
+        # Return accumulated output if in-memory output is requested
+        if options['memory']:
+            return output
+
     else:
-        root_collections = [col_exporter.collection]
-
-    exported_collections = []
-    for root_collection in root_collections:
-        for c in root_collection.children.values() + [root_collection]:
-            if c not in exported_collections:
-                name = get_col_collection_name(c, root_collection)
-                output += col_exporter.export_col(c, name)
-                exported_collections.append(c)
-
-    if file_name:
-        with open(file_name, mode='wb') as file:
-            file.write(output)
-        return
-
-    return output
+        # Non-mass export: use the specified file name directly
+        return col_samp_exporter.export_col(options['file_name'])

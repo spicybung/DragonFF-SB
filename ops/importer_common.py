@@ -1,5 +1,7 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2025 SpicyBung
+
+# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,6 +25,7 @@ game_version.VC = 'VC'
 game_version.SA = 'SA'
 game_version.LCS = 'LCS'
 game_version.VCS = 'VCS'
+game_version.IV = 'IV'
 
 #######################################################            
 def set_object_mode(obj, mode):
