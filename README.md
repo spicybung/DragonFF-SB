@@ -1,26 +1,30 @@
 # DemonFF 👹
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 ## Introduction
 
-DemonFF is a fork of DragonFF which is designed to help you work with models for SA-MP/open.mp 
+DemonFF is a neat little fork of DragonFF made to enhance your workflow by providing advanced features for working with Renderware files. Whether you're working with GTA game assets - or it happens to be another Renderware game, DemonFF simplifies the process of importing and exporting many RW types such as DFF files, as well as .IFP animation, and map editing(IPL/IDE/PWN/LUA).
 
-**Note:** DemonFF is a fork of Parik27's GTA DragonFF, with compatibility for SAMP/open.mp
+
 
 ## Features
 
-- **Renderware Compatibility**: DemonFF is tailored to work seamlessly with Renderware DFF files, offering support for various versions and features.
+- **Renderware File Compatibility**: DemonFF is planned to work with all Renderware DFF files, offering support for various versions and features.
 
-- **Blender Integration**: Integrate DemonFF directly into Blender, making it an integral part of your modeling and animation workflow.
+- **Export and Import**: Easily export your Blender models, maps, etc and import existing DFF files into Blender for further editing.
 
-- **Export and Import**: Easily export your Blender models to DFF format and import existing DFF files into Blender for further editing.
+- **Collision Editing**: Streamline collision model editing whether your workload is large or small, as well as importing and exporting.
 
-- **Collision Editing**: Streamline collision model editing with DemonFF's dedicated tools for managing spheres, boxes, vertices, and faces.
+- **Animation Editing**: Import and export .IFP animation files from Grand Theft Auto, and modify them or create your own.
+
+- **Map Editing**: Easily import your IPL & IDE's, and create your own map for singleplayer and/or SAMP/open.mp.
 
 - **Custom Section IDs**: DemonFF supports Rockstar's custom section IDs, allowing you to work with specific RW plugins seamlessly.
 
-- **SAMP/open.mp Compatibility**: DemonFF is designed for compatibility with San Andreas Multiplayer (SAMP) and open.mp, allowing you to export models and collision for use in multiplayer environments.
+- **SAMP/open.mp Compatibility**: DemonFF is designed for compatibility with San Andreas Multiplayer (SAMP) and open.mp, and comes with Pawn features.
+  0
+- **MTA Compatibility**: DemonFF is planned to support LUA scripts for Multi Theft Auto, allowing ease during map creation(SOON...).
 
 ## Getting Started
 
@@ -36,6 +40,10 @@ DemonFF is a fork of DragonFF which is designed to help you work with models for
 1. Open Blender and navigate to the DemonFF panel.
 2. Import or create your 3D model.
 3. Use DemonFF tools to edit collision models, export, and import DFF files.
+4. Use DemonFF to import .IFP animation.
+5. Import/edit maps via .IPL & IDE files.
+6. Export your map to Pawn, & artconfig.
+7. Export your map to LUA for MTA(WIP).
 
 ## Documentation
 
@@ -52,8 +60,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Special thanks to the Blender community and contributors.
-- Inspired by the Renderware engine and GTA modding community.
-- Parik27 for his DragonFF Blender Add-on, which without would have made this impossible.
+- The GTA modding community.
+- GTA Mods Wiki for being a huge considerate help in figuring things out.
+- Kam & Goldfish for their contributions to Grand Theft Auto modding.
+- Parik27, Psycrow & many others for their work on DragonFF Blender Add-on, which without would have made this impossible.
+- Many other special people.
 
 
 ---
