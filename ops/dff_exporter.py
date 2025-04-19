@@ -262,7 +262,6 @@ def edit_bone_matrix(edit_bone):
         prediction
     """
 
-    return edit_bone.matrix
     
     # What I wrote above is rubbish, by the way. This is a hack-ish solution
     original_tail = list(edit_bone.tail)
@@ -310,7 +309,12 @@ class dff_exporter:
 
         return obj.parent
     
-    #######################################################
+    def truncate_frame_name(name):
+        name_bytes = name.encode('utf-8')
+        if len(name_bytes) > 24:
+            return name_bytes[:22].decode('utf-8', 'ignore') 
+        return name
+
     @staticmethod
     def create_frame(obj, append=True, set_parent=True, matrix_local=None):
         self = dff_exporter
@@ -965,14 +969,7 @@ class dff_exporter:
             )
             frame.bone_data = bone_data
             self.dff.frame_list.append(frame)
-    #######################################################
-    def truncate_frame_name(name):
-        """Truncates the frame name to <24 bytes to leave space for null termination."""
-        name_bytes = name.encode('utf-8')
-        if len(name_bytes) > 24:
-            return name_bytes[:22].decode('utf-8', 'ignore')  # Truncate to <24 bytes
-        return name
-    #######################################################
+
     @staticmethod
     def export_empty(obj):
         self = dff_exporter
@@ -1032,6 +1029,16 @@ class dff_exporter:
 
         # 2DFX
         ext_2dfx_exporter(self.dff.ext_2dfx).export_objects(objects)
+
+
+        #Collision Attributes
+        if hasattr(obj, "dff"):
+            col_brightness = getattr(obj.dff, "col_brightness", self.col_brightness)
+            col_light = getattr(obj.dff, "col_light", self.col_light)
+        else:
+            col_brightness = self.col_brightness
+            col_light = self.col_light
+
 
         # Collision
         if self.export_coll:

@@ -1,5 +1,8 @@
-# GTA DragonFF - Blender scripts to edit basic GTA formats
-# Copyright (C) 2019  Parik
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2025 SpicyBung
+
+# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +26,7 @@ from bpy.utils import register_class, unregister_class
 bl_info = {
     "name": "GTA DemonFF",
     "author": "SpicyBung",
-    "version": (0, 0, 7),
+    "version": (0, 0, 4),
     "blender": (2, 80, 0),
     "category": "Import-Export",
     "location": "File > Import/Export",
@@ -55,13 +58,10 @@ class OBJECT_PT_join_similar_meshes_panel(bpy.types.Panel):
         row.operator("object.join_similar_named_meshes", text="Join Similar Meshes")
 
 def join_similar_named_meshes(context):
-    # Create a dictionary to store objects by their base names
     base_name_dict = {}
     
-    # Iterate through all objects in the scene
     for obj in context.scene.objects:
         if obj.type == 'MESH':
-            # Split the name by the dot to separate the base name and the suffix
             name_parts = obj.name.split('.')
             base_name = name_parts[0]
             
@@ -70,7 +70,6 @@ def join_similar_named_meshes(context):
             
             base_name_dict[base_name].append(obj)
     
-    # Iterate through the dictionary and join objects with similar names
     for base_name, objects in base_name_dict.items():
         if len(objects) > 1:
             context.view_layer.objects.active = objects[0]
@@ -85,25 +84,43 @@ def join_similar_named_meshes(context):
 _classes = [
     gui.IMPORT_OT_dff_custom,
     gui.EXPORT_OT_dff_custom,
+    gui.IMPORT_OT_txd,
     gui.EXPORT_OT_col,
     gui.OBJECT_OT_set_collision_objects,
     gui.MATERIAL_PT_dffMaterials,
+    gui.OBJECT_OT_dff_generate_bone_props,
+    gui.OBJECT_OT_dff_set_parent_bone,
+    gui.OBJECT_OT_dff_clear_parent_bone,
     gui.OBJECT_PT_dffObjects,
     gui.OBJECT_OT_join_similar_named_meshes,
     gui.OBJECT_PT_dff_misc_panel,
     gui.OBJECT_OT_force_doubleside_mesh,
     gui.OBJECT_OT_recalculate_normals_outward,
+    gui.OBJECT_OT_recalculate_normals_inward,
     gui.OBJECT_OT_optimize_mesh,
     gui.COLLECTION_OT_nuke_matched,
     gui.COLLECTION_OT_organize_scene_collection,
+    gui.COLLECTION_OT_remove_empty_collections,
     gui.COLLECTION_PT_custom_cleanup_panel,
+    gui.OBJECT_OT_remove_frames,
+    gui.OBJECT_OT_truncate_frame_names,
     gui.EXT2DFXObjectProps,
     gui.Light2DFXObjectProps,
     gui.DFFMaterialProps,
     gui.DFFObjectProps,
-    gui.MapImportPanel,
+    gui.TXDImportPanel,
+    gui.DFFFrameProps,
+    gui.DFFAtomicProps,
     gui.DFFSceneProps,
+    gui.MapImportPanel,
+    gui.DFF_MT_ImportChoice,
     gui.DFF_MT_ExportChoice,
+    gui.DFF_MT_EditArmature,
+    gui.DFF_MT_Pose,
+    gui.DFF_UL_FrameItems,
+    gui.DFF_UL_AtomicItems,
+    gui.SCENE_PT_dffFrames,
+    gui.SCENE_PT_dffAtomics,
     gui.SCENE_OT_duplicate_all_as_collision,
     map_importer.Map_Import_Operator,
     map_exporter.SAMP_IDE_Import_Operator,
@@ -114,21 +131,21 @@ _classes = [
     map_exporter.ExportToPawnOperator,
     map_exporter.DemonFFMapExportPanel,
     map_exporter.DemonFFPawnPanel,
-    gui.DFF2dfxPanel,
+    img_importer.IMPORT_PT_img_panel,
+    img_importer.IMPORT_OT_img,
+    gui.DEMONFF_PT_DFF2DFX,
     gui.SAEFFECTS_OT_AddLightInfo,
     gui.SAEFFECTS_OT_AddParticleInfo,
     gui.SAEFFECTS_OT_AddTextInfo,
     gui.SAEFFECTS_OT_ExportInfo,
     gui.SAEFFECTS_OT_ExportTextInfo,
     gui.SAEFFECTS_OT_CreateLightsFromOmni,
-    gui.SAEFFECTS_OT_Import2dfx,
     gui.SAEFFECTS_OT_ViewLightInfo,
     gui.SAEEFFECTS_OT_CreateLightsFromEntries,
     gui.OBJECT_PT_SDFXLightInfoPanel,
     gui.SAEEFFECTS_PT_Panel,
     gui.IMPORT_OT_ifp,
-    img_importer.IMPORT_OT_img,
-    img_importer.IMPORT_PT_img_panel
+    gui.EXPORT_OT_ifp
 ]
 
 
@@ -154,7 +171,7 @@ def register():
     else:
         bpy.types.TOPBAR_MT_file_import.append(gui.import_dff_func)
         bpy.types.TOPBAR_MT_file_export.append(gui.export_dff_func)
-        bpy.types.TOPBAR_MT_file_import.append(gui.menu_func_import)  # Add the IFP import option
+
 
 def unregister():
     if (2, 80, 0) > bpy.app.version:
@@ -163,7 +180,6 @@ def unregister():
     else:
         bpy.types.TOPBAR_MT_file_import.remove(gui.import_dff_func)
         bpy.types.TOPBAR_MT_file_export.remove(gui.export_dff_func)
-        bpy.types.TOPBAR_MT_file_import.remove(gui.menu_func_import)  # Remove the IFP import option
 
     for cls in reversed(_classes):
         unregister_class(cls)
