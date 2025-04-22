@@ -18,7 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import bpy
-from .gui import gui
+from .gui import gui, pie_menus
 from .ops import map_importer, map_exporter, img_importer
 
 from bpy.utils import register_class, unregister_class
@@ -93,6 +93,7 @@ _classes = [
     gui.OBJECT_OT_dff_clear_parent_bone,
     gui.OBJECT_PT_dffObjects,
     gui.OBJECT_OT_join_similar_named_meshes,
+    gui.SCENE_OT_duplicate_all_as_objects,
     gui.OBJECT_PT_dff_misc_panel,
     gui.OBJECT_OT_force_doubleside_mesh,
     gui.OBJECT_OT_recalculate_normals_outward,
@@ -145,7 +146,8 @@ _classes = [
     gui.OBJECT_PT_SDFXLightInfoPanel,
     gui.SAEEFFECTS_PT_Panel,
     gui.IMPORT_OT_ifp,
-    gui.EXPORT_OT_ifp
+    gui.EXPORT_OT_ifp,
+    gui.DFF_MT_ToolWheel
 ]
 
 
@@ -165,6 +167,8 @@ def register():
         subtype='FILE_PATH'
     )
 
+    pie_menus.register_keymaps()
+
     if (2, 80, 0) > bpy.app.version:
         bpy.types.INFO_MT_file_import.append(gui.import_dff_func)
         bpy.types.INFO_MT_file_export.append(gui.export_dff_func)
@@ -183,6 +187,8 @@ def unregister():
 
     for cls in reversed(_classes):
         unregister_class(cls)
+
+    pie_menus.unregister_keymaps()
 
     del bpy.types.Scene.saeffects_export_path
     del bpy.types.Scene.saeffects_text_export_path

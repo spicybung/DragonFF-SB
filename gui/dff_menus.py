@@ -18,6 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import bpy
+from bpy.types import Menu
 import bmesh
 import gpu
 import struct
@@ -37,6 +38,8 @@ fx_psystems = ["prt_blood", "prt_boatsplash"]
 effectfile = ""
 textfile = ""
 
+
+#######################################################
 #######################################################
 class OBJECT_PT_dff_misc_panel(bpy.types.Panel):
     bl_label = "DemonFF - Miscellaneous"
@@ -47,8 +50,9 @@ class OBJECT_PT_dff_misc_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Mesh Operations:")
+        layout.label(text="Object Operations:")
         layout.operator("object.join_similar_named_meshes", text="Join Similar Named Meshes")
+        layout.operator("scene.duplicate_all_as_objects", text="Duplicate All as Objects")
         layout.operator("object.optimize_mesh", text="Optimize Mesh(SLOW)")
 
         layout.label(text="Normals Operations:")
@@ -225,31 +229,37 @@ class Escalator2DFXObjectProps(bpy.types.PropertyGroup):
         
 #######################################################
 def join_similar_named_meshes(context):
-    # Create a dictionary to store objects by their base names
     base_name_dict = {}
-    
 
     for obj in context.scene.objects:
         if obj.type == 'MESH':
-
-            name_parts = obj.name.split('.')
-            base_name = name_parts[0]
-            
-            if base_name not in base_name_dict:
-                base_name_dict[base_name] = []
-            
-            base_name_dict[base_name].append(obj)
-    
+            base_name = obj.name.split('.')[0]
+            base_name_dict.setdefault(base_name, []).append(obj)
 
     for base_name, objects in base_name_dict.items():
-        if len(objects) > 1:
-            context.view_layer.objects.active = objects[0]
-            bpy.ops.object.select_all(action='DESELECT')
-            
-            for obj in objects:
-                obj.select_set(True)
-            
-            bpy.ops.object.join()
+        if len(objects) <= 1:
+            continue
+
+        if bpy.context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        target = objects[0]
+
+        others = [obj for obj in objects[1:] if obj != target]
+
+        for obj in others:
+            if obj.name not in target.users_collection[0].objects:
+                target.users_collection[0].objects.link(obj)
+
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        target.select_set(True)
+        for obj in others:
+            obj.select_set(True)
+
+        context.view_layer.objects.active = target
+        bpy.ops.object.join()
+
 #######################################################
 class OBJECT_OT_join_similar_named_meshes(bpy.types.Operator):
     bl_idname = "object.join_similar_named_meshes"
@@ -298,6 +308,65 @@ class OBJECT_OT_optimize_mesh(bpy.types.Operator):
         self.report({'INFO'}, "Optimized selected meshes")
         return {'FINISHED'}
 #######################################################   
+class SCENE_OT_duplicate_all_as_objects(bpy.types.Operator):
+    bl_idname = "scene.duplicate_all_as_objects"
+    bl_label = "Duplicate All as Objects"
+    bl_description = "Duplicate all mesh objects into new '.dff' collections and select only the duplicates"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        bpy.ops.object.select_all(action='DESELECT')
+        root_collection = context.scene.collection
+        duplicated_objects = []
+        collection_pairs = []
+
+        used_names = {obj.name for obj in bpy.data.objects}
+
+        for obj in context.scene.objects:
+            if obj.type != 'MESH' or not obj.users_collection:
+                continue
+
+            # Generate a unique name like bonerific.001 manually
+            base = obj.name
+            count = 1
+            new_name = f"{base}.{str(count).zfill(3)}"
+            while new_name in used_names:
+                count += 1
+                new_name = f"{base}.{str(count).zfill(3)}"
+            used_names.add(new_name)
+
+            duplicate = bpy.data.objects.new(obj.name, obj.data.copy())
+            duplicate.name = new_name
+
+            dff_collection_name = f"{base}.dff"
+            dff_collection = bpy.data.collections.new(dff_collection_name)
+            root_collection.children.link(dff_collection)
+            dff_collection.objects.link(duplicate)
+
+            if hasattr(duplicate, "dff"):
+                duplicate.dff.type = 'OBJ'
+
+            duplicate.select_set(True)
+            duplicated_objects.append(duplicate)
+
+            original_collection = obj.users_collection[0]
+            collection_pairs.append((dff_collection, original_collection))
+
+        for dff_collection, original_collection in collection_pairs:
+            if original_collection.name in root_collection.children:
+                root_collection.children.unlink(bpy.data.collections[original_collection.name])
+            if dff_collection.name in root_collection.children:
+                root_collection.children.unlink(bpy.data.collections[dff_collection.name])
+            root_collection.children.link(bpy.data.collections[dff_collection.name])
+            root_collection.children.link(bpy.data.collections[original_collection.name])
+
+        if duplicated_objects:
+            context.view_layer.objects.active = duplicated_objects[-1]
+
+        self.report({'INFO'}, f"Duplicated {len(duplicated_objects)} mesh objects into '.dff' collections.")
+        return {'FINISHED'}
+
+#######################################################   
 class OBJECT_OT_force_doubleside_mesh(bpy.types.Operator):
     """Extrudes faces along their normals for all selected objects by 0.001523M"""
     bl_idname = "object.force_doubleside_mesh"
@@ -342,18 +411,23 @@ class OBJECT_OT_recalculate_normals_outward(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        import bmesh
+
         processed_meshes = []
 
-        print("Starting recalculation of normals (outward) - this may take time - please wait...")
+        print("Recalculating normals (outward) - please wait...")
         self.report({'INFO'}, "Recalculating normals (outward) - please wait...")
 
         for obj in context.selected_objects:
             if obj.type == 'MESH':
-                bpy.context.view_layer.objects.active = obj
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.normals_make_consistent(inside=False)
-                bpy.ops.object.mode_set(mode='OBJECT')
+                mesh = obj.data
+
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+                bm.to_mesh(mesh)
+                bm.free()
+
                 processed_meshes.append(obj.name)
 
         if processed_meshes:
@@ -373,19 +447,29 @@ class OBJECT_OT_recalculate_normals_inward(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        import bmesh
+
         processed_meshes = []
 
-        print("Starting recalculation of normals (inward) - this may take time - please wait...")
+        print("Recalculating normals (inward) - please wait...")
         self.report({'INFO'}, "Recalculating normals (inward) - please wait...")
 
         for obj in context.selected_objects:
-            if obj.type == 'MESH':
-                bpy.context.view_layer.objects.active = obj
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.normals_make_consistent(inside=True)
-                bpy.ops.object.mode_set(mode='OBJECT')
-                processed_meshes.append(obj.name)
+            if obj.type != 'MESH':
+                continue
+
+            mesh = obj.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+
+            bmesh.ops.reverse_faces(bm, faces=bm.faces)
+
+            bm.to_mesh(mesh)
+            bm.free()
+
+            processed_meshes.append(obj.name)
 
         if processed_meshes:
             report_msg = f"Normals recalculated inward for: {', '.join(processed_meshes)}"
@@ -393,7 +477,9 @@ class OBJECT_OT_recalculate_normals_inward(bpy.types.Operator):
             report_msg = "No mesh objects were processed."
 
         self.report({'INFO'}, report_msg)
+        print(report_msg)
         return {'FINISHED'}
+
 
 #######################################################
 class OBJECT_OT_set_collision_objects(bpy.types.Operator):
@@ -874,6 +960,7 @@ class DFF_MT_ExportChoice(bpy.types.Menu):
                              text="DemonFF DFF (.dff/.col)")
         self.layout.operator(EXPORT_OT_col.bl_idname,
                              text="DemonFF Collision (.col)")
+        
 
 #######################################################
 def import_dff_func(self, context):
@@ -1385,46 +1472,44 @@ class COLLECTION_OT_remove_empty_collections(bpy.types.Operator):
 class SCENE_OT_duplicate_all_as_collision(bpy.types.Operator):
     bl_idname = "scene.duplicate_all_as_collision"
     bl_label = "Duplicate All as Collision"
-    bl_description = "Duplicate all objects in the scene as collision meshes, organize them in their own collections, and place them above the original collections"
+    bl_description = "Duplicate all mesh objects in the scene as collision meshes"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         root_collection = bpy.context.scene.collection
-
-        # A list to store original .dff collections and their new .ColMesh collections
         collection_pairs = []
 
         for obj in context.scene.objects:
-
             if not obj.users_collection or obj.type != 'MESH':
                 continue
 
+            col_name = f"{obj.name}.col.{obj.name}"
 
             duplicate = obj.copy()
             duplicate.data = obj.data.copy() if obj.data else None
-            duplicate.name = f"{obj.name}.001"
+            duplicate.name = col_name
 
-            colmesh_collection_name = f"{obj.name}.ColMesh"
-            colmesh_collection = bpy.data.collections.new(colmesh_collection_name)
-            context.scene.collection.children.link(colmesh_collection)
-            colmesh_collection.objects.link(duplicate)
-
+            col_collection = bpy.data.collections.new(col_name)
+            root_collection.children.link(col_collection)
+            col_collection.objects.link(duplicate)
 
             if hasattr(duplicate, "dff"):
                 duplicate.dff.type = 'COL'
 
 
             original_collection = obj.users_collection[0]
-            collection_pairs.append((colmesh_collection, original_collection))
+            collection_pairs.append((col_collection, original_collection))
 
-        for colmesh_collection, dff_collection in collection_pairs:
-
-            root_collection.children.unlink(dff_collection)
-            root_collection.children.unlink(colmesh_collection)
-            root_collection.children.link(colmesh_collection)
+        # Reorder so col comes first
+        for col_collection, dff_collection in collection_pairs:
+            if dff_collection in root_collection.children:
+                root_collection.children.unlink(dff_collection)
+            if col_collection in root_collection.children:
+                root_collection.children.unlink(col_collection)
+            root_collection.children.link(col_collection)
             root_collection.children.link(dff_collection)
 
-        self.report({'INFO'}, "Duplicated and organized all objects as collision meshes above original collections")
+        self.report({'INFO'}, "Objects duplicated as .COL objects.")
         return {'FINISHED'}
 
 #######################################################    
@@ -1441,6 +1526,7 @@ class COLLECTION_PT_custom_cleanup_panel(bpy.types.Panel):
         layout.operator("collection.organize_scene_collection", icon='SORTALPHA')
         layout.operator("collection.remove_empty_collections", icon='X')
 
+####################################################### 
 class SCENE_PT_animation_browser(bpy.types.Panel):
     bl_label = "DemonFF - Animation Browser"
     bl_idname = "SCENE_PT_animation_browser"
@@ -1706,9 +1792,11 @@ class SCENE_PT_dffAtomics(bpy.types.Panel):
             col = row.column()
             col.operator(SCENE_OT_dff_update.bl_idname, icon='FILE_REFRESH', text="")
 
+
 def register():
     register_saeffects()
     bpy.utils.register_class(MATERIAL_PT_dffMaterials)
+    bpy.utils.register_class(DFF_MT_ImportChoice)
     bpy.utils.register_class(DFF_MT_ExportChoice)
     bpy.utils.register_class(OBJECT_PT_dffObjects)
     bpy.utils.register_class(DFFMaterialProps)
@@ -1720,19 +1808,22 @@ def register():
     bpy.utils.register_class(SAEEFFECTS_PT_Panel)
     bpy.utils.register_class(OBJECT_OT_force_doubleside_mesh)
     bpy.utils.register_class(OBJECT_PT_dff_misc_panel)
-    bpy.utils.register_class
     bpy.utils.register_class(OBJECT_OT_recalculate_normals_outward)
     bpy.utils.register_class(OBJECT_OT_optimize_mesh)
     bpy.utils.register_class(COLLECTION_OT_nuke_matched)
     bpy.utils.register_class(COLLECTION_OT_organize_scene_collection)
     bpy.utils.register_class(COLLECTION_PT_custom_cleanup_panel)
     bpy.utils.register_class(SCENE_OT_assign_action_to_object)
-    bpy.utils.register_class(SCENE_PT_animation_browser)    
+    bpy.utils.register_class(SCENE_PT_animation_browser)
+    bpy.utils.register_class(SCENE_OT_duplicate_all_as_objects)
+    print("✅ DFF Test Pie Menu registered. Press F in 3D View.")
+   
 
 
 def unregister():
     unregister_saeffects()
     bpy.utils.unregister_class(MATERIAL_PT_dffMaterials)
+    bpy.utils.unregister_class(DFF_MT_ImportChoice)
     bpy.utils.unregister_class(DFF_MT_ExportChoice)
     bpy.utils.unregister_class(OBJECT_PT_dffObjects)
     bpy.utils.unregister_class(DFFMaterialProps)
@@ -1750,8 +1841,8 @@ def unregister():
     bpy.utils.unregister_class(COLLECTION_PT_custom_cleanup_panel)
     bpy.utils.unregister_class(COLLECTION_OT_organize_scene_collection)
     bpy.utils.unregister_class(SCENE_OT_assign_action_to_object)
-    bpy.utils.unregister_class(SCENE_PT_animation_browser)   
-
+    bpy.utils.unregister_class(SCENE_PT_animation_browser)
+    bpy.utils.unregister_class(SCENE_OT_duplicate_all_as_objects)
 
 if __name__ == "__main__":
     register()
