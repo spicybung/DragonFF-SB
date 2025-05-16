@@ -17,16 +17,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import bpy
 import bmesh
-import mathutils
-import os
 import os.path
-from collections import defaultdict
+import mathutils
 
 from ..gtaLib import dff_samp
+from collections import defaultdict
 from .col_samp_exporter import export_col
 from ..ops.ext_2dfx_exporter import ext_2dfx_exporter
+
 
 #######################################################
 def clear_extension(string):
@@ -289,8 +290,7 @@ class dff_exporter:
     parent_queue = {}
     collection = None
     export_coll = False
-    col_brightness = 1.0
-    col_light = 1.0
+
 
     #######################################################
     @staticmethod
@@ -1044,8 +1044,6 @@ class dff_exporter:
                 'collection'    : self.collection,
                 'only_selected' : self.selected,
                 'mass_export'   : False,
-                'col_brightness': self.col_brightness,
-                'col_light'     : self.col_light
             })
 
             if len(mem) != 0:

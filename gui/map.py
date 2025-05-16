@@ -1,7 +1,7 @@
 # DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
 # 2023 - 2025 SpicyBung
 
-# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
 # Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
@@ -20,13 +20,34 @@
 import bpy
 import os
 import gpu
-from ..data import map_data
-import numpy as np
 import random
+import numpy as np
+
+from ..data import map_data
+from bpy.types import Operator
+from bpy_extras.io_utils import ImportHelper
 from gpu_extras.batch import batch_for_shader
 from ..ops.importer_common import game_version
 from bpy.props import StringProperty, CollectionProperty
 
+
+#######################################################
+class SCENE_OT_demonff_map_filebrowser(bpy.types.Operator, ImportHelper):
+    """Opens file browser to select custom IPL, then imports it"""
+    bl_idname = "scene.demonff_map_filebrowser"
+    bl_label = "Import Map Section (.ipl)"
+
+    filename_ext = ".ipl"
+    filter_glob: StringProperty(default="*.ipl", options={'HIDDEN'})
+
+    def execute(self, context):
+        settings = context.scene.dff
+        settings.custom_ipl_path = self.filepath
+        settings.use_custom_map_section = True
+
+        # Call the actual import operator after setting path
+        bpy.ops.scene.demonff_map_import('INVOKE_DEFAULT')
+        return {'FINISHED'}
 #######################################################
 def quat_to_degrees(quat):
     euler = quat.to_euler('XYZ')
@@ -94,6 +115,8 @@ class DFFSceneProps(bpy.types.PropertyGroup):
             (game_version.III, 'GTA III', 'GTA III map segments'),
             (game_version.VC, 'GTA VC', 'GTA VC map segments'),
             (game_version.SA, 'GTA SA', 'GTA SA map segments'),
+            (game_version.SS, 'GTA S&S', 'GTA S&S map segments'),
+            (game_version.MX, 'GTA MX', 'GTA Mixed map segments'),
             (game_version.LCS, 'GTA LCS', 'GTA LCS map segments'),
             (game_version.VCS, 'GTA VCS', 'GTA VCS map segments'),
             (game_version.IV, 'GTA IV', 'GTA IV map segments'),
@@ -104,6 +127,19 @@ class DFFSceneProps(bpy.types.PropertyGroup):
         name = 'Map segment',
         items = update_map_sections
     )
+
+    custom_ipl_path: bpy.props.StringProperty(
+        name="Custom IPL",
+        description="Path to IPL file",
+        default="",
+        subtype='FILE_PATH'
+    )
+ 
+    use_custom_map_section : bpy.props.BoolProperty(
+        name        = "Use Custom Map Section",
+        default     = False
+    )
+ 
 
     skip_lod: bpy.props.BoolProperty(
         name        = "Skip LOD Objects",
@@ -217,7 +253,7 @@ class DFFSceneProps(bpy.types.PropertyGroup):
         description = "Filter frames and atomics by active collection",
         default     = True
     )
-
+    #######################################################
     def draw_fg():
         if not bpy.context.scene.dff.draw_facegroups:
             return
@@ -275,6 +311,71 @@ class DFFSceneProps(bpy.types.PropertyGroup):
     #######################################################
     def register():
         bpy.types.Scene.dff = bpy.props.PointerProperty(type=DFFSceneProps)
+
+#######################################################
+class SCENE_OT_select_ipl_and_import(bpy.types.Operator, ImportHelper):
+    """Select IPL file and immediately import"""
+    bl_idname = "scene.select_ipl_and_import"
+    bl_label = "Select and Import IPL"
+
+    filename_ext = ".ipl"
+    filter_glob: StringProperty(default="*.ipl", options={'HIDDEN'})
+
+    def execute(self, context):
+        scene = context.scene
+        dff = scene.dff
+
+        if os.path.splitext(self.filepath)[-1].lower() == ".ipl":
+            filepath = os.path.normpath(self.filepath)
+            sep_pos = filepath.upper().find(f"DATA{os.sep}MAPS")
+            if sep_pos != -1:
+                game_root = filepath[:sep_pos]
+                dff.game_root = game_root
+                dff.custom_ipl_path = os.path.normpath(self.filepath)
+            else:
+                dff.custom_ipl_path = filepath
+
+            dff.use_custom_map_section = True
+
+            bpy.ops.scene.select_ipl_and_import('INVOKE_DEFAULT')
+            return {'FINISHED'}
+        else:
+            self.report({'ERROR'}, "Not a valid .ipl file")
+            return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.fileselect_add(self)
+
+#######################################################
+class SCENE_OT_ipl_select(bpy.types.Operator, ImportHelper):
+ 
+    bl_idname = "scene.select_ipl"
+    bl_label = "Select IPL File"
+ 
+    filename_ext = ".ipl"
+ 
+    filter_glob : bpy.props.StringProperty(
+        default="*.ipl",
+        options={'HIDDEN'})
+ 
+    def invoke(self, context, event):
+        if not context.scene.dff.game_root:
+            self.report({'WARNING'}, "Specify game root folder first")
+            return {'CANCELLED'}
+ 
+        self.filepath = context.scene.dff.game_root + "/DATA/MAPS/"
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+ 
+    def execute(self, context):
+        if os.path.splitext(self.filepath)[-1] == self.filename_ext:
+             filepath = os.path.normpath(self.filepath)
+             sep_pos = filepath.upper().find(f"DATA{os.sep}MAPS")
+             game_root = filepath[:sep_pos]
+             context.scene.dff.game_root = game_root
+             context.scene.dff.custom_ipl_path = os.path.relpath(filepath, game_root)
+        return {'FINISHED'}
+ 
 #######################################################
 def import_ide(filepaths, context):
     for filepath in filepaths:
@@ -323,7 +424,7 @@ def import_ide(filepaths, context):
                 print(f"No matching SAMP ID found for {obj.name}")
 
     print("SAMP IDE import completed for all files")
-
+#######################################################
 def mass_import_samp_ide(filepaths, context):
     for filepath in filepaths:
         if not filepath.endswith('.ide'):
@@ -423,8 +524,9 @@ class ExportToIPLOperator(bpy.types.Operator):
     filename_ext = ".ipl"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-
+    #######################################################
     def execute(self, context):
+        #######################################################
         def export_to_ipl(file_path, objects):
             with open(file_path, 'w') as f:
                 f.write("inst\n")
@@ -469,7 +571,7 @@ class ExportToIPLOperator(bpy.types.Operator):
 
         self.report({'INFO'}, f"Exported {len(selected_objects)} objects to {output_file}")
         return {'FINISHED'}
-
+    #######################################################
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -480,8 +582,9 @@ class ExportToIDEOperator(bpy.types.Operator):
     filename_ext = ".ide"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-
+    #######################################################
     def execute(self, context):
+        #######################################################
         def export_to_ide(file_path, objects):
             name_mapping = {}
             with open(file_path, 'w') as f:
@@ -515,7 +618,7 @@ class ExportToIDEOperator(bpy.types.Operator):
 
         self.report({'INFO'}, f"Exported {len(scene_objects)} objects to {output_file}")
         return {'FINISHED'}
-
+    #######################################################
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -556,7 +659,7 @@ class ExportToPawnOperator(bpy.types.Operator):
         default=0.0,
         description="Offset for the y coordinate of the objects"
     )
-
+    #######################################################
     def execute(self, context):
         def export_to_pawn(file_path, objects):
             artconfig_path = os.path.join(os.path.dirname(file_path), 'artconfig.txt')
@@ -634,11 +737,11 @@ class ExportToPawnOperator(bpy.types.Operator):
         self.report({'INFO'}, f"Exported {len(selected_objects)} objects to {output_file}")
         self.report({'INFO'}, f"Exported artconfig.txt to {os.path.dirname(output_file)}")
         return {'FINISHED'}
-
+    #######################################################
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-
+    #######################################################
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "model_directory")
@@ -652,7 +755,7 @@ class RemoveBuildingForPlayerOperator(bpy.types.Operator):
     bl_idname = "object.remove_building_for_player"
     bl_label = "Remove Building For Player"
     bl_options = {'REGISTER', 'UNDO'}
-
+    #######################################################
     def execute(self, context):
         for obj in context.selected_objects:
             obj_id = obj.get("IDE_ID", -1)
@@ -670,7 +773,7 @@ class MapImportPanel(bpy.types.Panel):
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "scene"
-
+    #######################################################
     def draw(self, context):
         layout = self.layout
         settings = context.scene.dff
@@ -679,7 +782,11 @@ class MapImportPanel(bpy.types.Panel):
 
         col = flow.column()
         col.prop(settings, "game_version_dropdown", text="Game")
-        col.prop(settings, "map_sections", text="Map segment")
+        if settings.use_custom_map_section:
+            col.prop(settings, "custom_ipl_path", text="Custom IPL")
+        else:
+            col.prop(settings, "map_sections", text="Map segment")
+        col.prop(settings, "use_custom_map_section", text="Use custom map segment")
         col.separator()
         col.prop(settings, "skip_lod", text="Skip LOD objects")
 
@@ -688,18 +795,21 @@ class MapImportPanel(bpy.types.Panel):
         layout.prop(settings, 'game_root')
         layout.prop(settings, 'dff_folder')
 
-        row = layout.row()
-        row.operator("scene.demonff_map_import")
+        if settings.use_custom_map_section:
+            layout.operator("scene.demonff_map_import", text="Import custom IPL", icon='FILE_FOLDER')
+        else:
+            layout.operator("scene.demonff_map_import", text="Import map section")
+
+
 
 #######################################################
-
 class DemonFFMapExportPanel(bpy.types.Panel):
     bl_label = "DemonFF - Map Export"
     bl_idname = "SCENE_PT_map_export"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "scene"
-
+    #######################################################
     def draw(self, context):
         layout = self.layout
         row = layout.row()
@@ -713,7 +823,7 @@ class DemonFFPawnPanel(bpy.types.Panel):
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "scene"
-
+    #######################################################
     def draw(self, context):
         layout = self.layout
         row = layout.row()

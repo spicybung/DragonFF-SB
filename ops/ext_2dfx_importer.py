@@ -1,7 +1,8 @@
 # DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
 # 2023 - 2025 SpicyBung
 
-# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,10 +20,10 @@
 # See: https://gtamods.com/wiki/2d_Effect_(RW_Section)
 
 import bpy
-
+import math
+from ..gtaLib import dff
 from mathutils import Vector
 
-from ..gtaLib import dff
 
 #######################################################
 def create_arrow_mesh(name):
@@ -122,6 +123,54 @@ class ext_2dfx_importer:
 
         settings = obj.dff.ext_2dfx
         settings.val_str24_1 = entry.effect
+
+        return obj
+    
+    #######################################################
+    def import_ped_attractor(self, entry):
+        mesh = create_arrow_mesh("_2dfx_ped_attractor")
+        obj = bpy.data.objects.new("2dfx_ped_attractor", mesh)
+        obj.lock_rotation[0] = True
+        obj.lock_rotation[1] = True
+
+        settings = obj.dff.ext_2dfx
+
+        # Extract rotation matrix vectors
+        if hasattr(entry, "rotation_matrix") and isinstance(entry.rotation_matrix, (list, tuple)) and len(entry.rotation_matrix) >= 9:
+            queue_dir = entry.rotation_matrix[0:3]
+            use_dir = entry.rotation_matrix[3:6]
+            forward_dir = entry.rotation_matrix[6:9]
+        else:
+            # Fallback default directions
+            queue_dir = (0.0, 0.0, 0.0)
+            use_dir = (0.0, 0.0, 0.0)
+            forward_dir = (0.0, 1.0, 0.0)
+
+        # Apply rotation from forward direction
+        forward = Vector(forward_dir)
+        try:
+            obj.rotation_euler = forward.to_track_quat('Y', 'Z').to_euler()
+        except:
+            obj.rotation_euler = (0.0, 0.0, 0.0)  # fallback if vector math fails
+
+        # Assign values to Blender custom properties
+        settings.queue_dir = Vector(queue_dir)
+        settings.use_dir = Vector(use_dir)
+        settings.forward_dir = Vector(forward_dir)
+        settings.script_name = entry.external_script or "none"
+        settings.ped_probability = entry.ped_existing_probability
+        settings.attractor_type = entry.attractor_type
+
+        print("===== Imported Ped Attractor 2DFX =====")
+        print(f"Position: {entry.loc}")
+        print(f"QueueDir: {queue_dir}")
+        print(f"UseDir: {use_dir}")
+        print(f"ForwardDir: {forward_dir}")
+        print(f"Script: '{settings.script_name}'")
+        print(f"Probability: {settings.ped_probability}")
+        print(f"Attractor Type: {settings.attractor_type} ({getattr(entry, 'Types', 'UNKNOWN')})")
+        print("=======================================")
+
 
         return obj
 
@@ -255,7 +304,10 @@ class ext_2dfx_importer:
         functions = {
             0: self.import_light,
             1: self.import_particle,
+            3: self.import_ped_attractor,
             4: self.import_sun_glare,
+            6: self.import_enter_exit,
+            7: self.import_road_sign,
             8: self.import_trigger_point,
             9: self.import_cover_point,
             10: self.import_escalator,
@@ -263,7 +315,8 @@ class ext_2dfx_importer:
 
         objects = []
 
-        for entry in self.effects.entries:
+        # self.effects is now a list, not an object with .entries — fixed to iterate directly
+        for entry in self.effects:
                 obj = functions[entry.effect_id](entry)
                 obj.dff.type = '2DFX'
                 obj.dff.ext_2dfx.effect = str(entry.effect_id)

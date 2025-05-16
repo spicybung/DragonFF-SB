@@ -1,7 +1,7 @@
 # DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
 # 2023 - 2025 SpicyBung
 
-# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
 # Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
@@ -17,16 +17,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
 import struct
-from collections import namedtuple
-from struct import unpack_from, calcsize, pack
-from enum import Enum, IntEnum
 
 from mathutils import Vector
+from enum import Enum, IntEnum
+from collections import namedtuple
+from struct import unpack_from, calcsize, pack
 
 from .pyffi.utils import tristrip
 
+global entries  # Use global to store parsed 2DFX entries
+entries = []
+
+
+#######################################################
 # Data types
 Chunk         = namedtuple("Chunk"         , "type size version")
 Clump         = namedtuple("Clump"         , "atomics lights cameras")
@@ -115,7 +119,7 @@ types = {
     "Specular Material"       : 39056118,
     "2d Effect"               : 39056120,
     "Extra Vert Color"        : 39056121,
-    "SAMP Collision Model"    : 39056127,
+    "Collision Model"         : 39056127,
     "Reflection Material"     : 39056124,
     "Frame"                   : 39056126,
 }
@@ -135,6 +139,77 @@ def strlen(bytes, offset=0):
         i += 1
         
     return i-offset
+
+#######################################################
+def write_2dfx_effect_section(obj):
+
+    # Prepare 2DFX entry data
+    position = obj.location
+    light_data = obj.data
+    color = light_data.color  # RGB values normalized (0.0 to 1.0)
+    sdfx_props = {key: obj[key] for key in obj.keys() if key.startswith('sdfx_')}
+
+    # Start constructing binary data for this light
+    entry_data = []
+
+    # Write the position of the light (X, Y, Z as floats)
+    entry_data.append(pack('<3f', position.x, position.y, position.z))
+
+    # Write entry type (0 for lights)
+    entry_data.append(pack('<I', 0))
+
+    # Write light properties (e.g., RGBA color)
+    entry_data.append(pack(
+        '<4B',
+        int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255  # RGBA color
+    ))
+
+    # Write other properties (Draw Distance, Outer Range, Corona Size, Inner Range)
+    entry_data.append(pack(
+        '<4f',
+        sdfx_props.get('sdfx_drawdis', 100.0),    # Draw Distance
+        sdfx_props.get('sdfx_outerrange', 18.0),  # Outer Range
+        sdfx_props.get('sdfx_size', 1.0),        # Corona Size
+        sdfx_props.get('sdfx_innerrange', 8.0)   # Inner Range
+    ))
+
+    # Write Flags and other attributes
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_showmode', 0)))  # Show Mode
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_OnAllDay', 0)))  # Enable Reflection
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_flaretype', 0)))  # Flare Type
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_shadcolormp', 0)))  # Shadow Color Multiplier
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_flags1', 0)))  # Flags 1
+
+    # Write Corona and Shadow Texture Names
+    corona_tex = sdfx_props.get('sdfx_corona', '').encode('ascii').ljust(24, b'\x00')
+    shadow_tex = sdfx_props.get('sdfx_shad', '').encode('ascii').ljust(24, b'\x00')
+    entry_data.append(corona_tex)
+    entry_data.append(shadow_tex)
+
+    # Write Shadow Z Distance and Flags 2
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_shadowzdist', 0)))  # Shadow Z Distance
+    entry_data.append(pack('<B', sdfx_props.get('sdfx_flags2', 0)))  # Flags 2
+
+    data_size = sum(len(data) for data in entry_data) - 4
+
+    entry_data[2] = pack('<I', data_size)
+
+    return b''.join(entry_data)
+
+####################################################### 
+def export_tristrips(triangle_list):
+    if not triangle_list:
+        return []
+
+    strip = []
+
+    for i, tri in enumerate(triangle_list):
+        if i == 0:
+            strip.extend(tri)
+        else:
+            strip.append(tri[2])
+
+    return strip
 
 #######################################################
 class Sections:
@@ -1102,7 +1177,6 @@ class Particle2dfx:
     def from_mem(loc, data, offset, size):
 
         self = Particle2dfx(loc)
-        self.effect = unpack_from("<24s", data, offset)[0].decode('ascii')
         return self
 
     #######################################################
@@ -1132,34 +1206,97 @@ class PedAttractor2dfx:
         
     #######################################################
     def __init__(self, loc):
-
         self.effect_id = 3
-        
         self.loc = loc
-        self.type = 0
-        self.rotation_matrix = None
-        self.external_script = ""
-        self.ped_existing_probability = 0
+
+        self.attractor_type = 0               # INT32 - Attractor behavior/type (0 = PED_ATM_ATTRACTOR, etc.)
+        self.queue_dir = (0.0, 0.0, 0.0)       # float[3] - Queue direction vector
+        self.use_dir = (0.0, 0.0, 0.0)         # float[3] - Use direction vector
+        self.forward_dir = (0.0, 1.0, 0.0)     # float[3] - Forward direction vector
+        self.external_script = "none"         # CHAR[8] - External script name
+
+        self.unknown1 = 0                     # BYTE - Unknown
+        self.unknown2 = 0                     # BYTE - Unused
+        self.unknown3 = 0                     # BYTE - Unknown
+        self.unknown4 = 0                     # BYTE - Unused
+
+
+    #######################################################
+    def __init__(self, loc):
+        self.effect_id = 3                      # INT32 - Effect ID for Ped Attractor
+        self.chunk_size = 50                    # INT32 - Chunk size (typically 56 bytes)
+        self.loc = loc                          # Vector3 - Position of the effect
+        self.Types = 0                        # INT32 - Type (PED_ATM_ATTRACTOR, etc.)
+        self.Right = loc.x
+        self.up = loc.y
+        self.forward = loc.z
+
+        self.attractor_type = 0               
+        self.queue_dir = (0.0, 0.0, 0.0)        # float[3] - Queue direction
+        self.use_dir = (0.0, 0.0, 0.0)          # float[3] - Use direction
+        self.forward_dir = (0.0, 1.0, 0.0)      # float[3] - Forward direction
+        self.external_script = "none"           # CHAR[8] - Script name (like 'TICKET', 'none', etc.)
+
+        self.ped_existing_probability = 0     # INT32 - Chance ped will appear (0–100)
+
+        self.unknown1 = 0                       # BYTE - Unknown
+        self.unknown2 = 0                       # BYTE - Not used
+        self.unknown3 = 0                       # BYTE - Unknown
+        self.unknown4 = 0                       # BYTE - Not used
 
     #######################################################
     @staticmethod
     def from_mem(loc, data, offset, size):
         self = PedAttractor2dfx(loc)
 
-        self.type = unpack_from("<I", data, offset)[0]
-        self.rotation_matrix = Sections.read(Matrix, data, offset + 4)
-        self.external_script = data[offset + 40: strlen(data, offset + 40)]
-        self.ped_existing_probabiliy = unpack_from("<I", data, offset + 48)[0]
+        self.attractor_type = struct.unpack_from('<I', data, offset)[0]
+        offset += 4
 
-        self.external_script = self.external_script.decode('ascii')
-        
+        self.queue_dir = struct.unpack_from('<3f', data, offset)
+        offset += 12
+
+        self.use_dir = struct.unpack_from('<3f', data, offset)
+        offset += 12
+
+        self.forward_dir = struct.unpack_from('<3f', data, offset)
+        offset += 12
+
+        script_bytes = data[offset:offset + 8]
+        self.external_script = script_bytes.split(b'\x00')[0].decode('ascii', errors='ignore')
+        offset += 8
+
+        self.ped_existing_probability = struct.unpack_from('<I', data, offset)[0]
+        offset += 4
+
+        self.unknown1, self.unknown2, self.unknown3, self.unknown4 = struct.unpack_from('<BBBB', data, offset)
+        offset += 4
+
         return self
+
 
     #######################################################
     def to_mem(self):
-        data = pack("<I", self.type)
-        data += Sections.write(Matrix, self.rotation_matrix)
-        data += pack("<8sI", self.external_script, self.ped_existing_probability)
+        data = b''
+
+        data += pack('<f', self.Right)
+        data += pack('<f', self.up)
+        data += pack('<f', self.forward)  
+
+        # Effect ID and entry size
+        data += pack('<I', self.effect_id)
+        data += pack('<I', 50)  # 50 bytes per entry
+
+        data += pack('<I', self.attractor_type)
+        data += pack('<3f', *self.queue_dir)
+        data += pack('<3f', *self.use_dir)
+        data += pack('<3f', *self.forward_dir)
+
+        script_padded = self.external_script.encode('ascii')[:8]
+        script_padded += b'\x00' * (8 - len(script_padded))
+        data += script_padded
+
+        data += pack('<I', self.ped_existing_probability)
+        data += pack('<BBBB', self.unknown1, self.unknown2, self.unknown3, self.unknown4)
 
         return data
 
@@ -1180,77 +1317,6 @@ class SunGlare2dfx:
     def to_mem(self):
         return b''
 
-#######################################################
-class Escalator2DFX:
-    # See: https://gtamods.com/wiki/2d_Effect_(RW_Section)#Entry_Type_10_-_Escalator
-
-    #######################################################
-    def __init__(self, loc):
-        self.effect_id = 10  # Should go after vectors
-        self.loc = loc       # This should be the standard_pos
-        self.standart_pos = loc
-        self.bottom = Vector()
-        self.top = Vector()
-        self.end = Vector()
-        self.direction = 0
-
-    #######################################################
-    @staticmethod
-    def from_mem(loc, data, offset, size):
-        self = Escalator2DFX(loc)
-
-        # Expectation: offset already at entry start (after effect ID and size)
-
-        # Bottom (12 bytes)
-        self.bottom = Sections.read(Vector, data, offset)
-        offset += 12
-
-        # Top (12 bytes)
-        self.top = Sections.read(Vector, data, offset)
-        offset += 12
-
-        # End (12 bytes)
-        self.end = Sections.read(Vector, data, offset)
-        offset += 12
-
-        # Direction (4 bytes)
-        self.direction = unpack_from('<I', data, offset)[0]
-        offset += 4
-
-        return self
-
-    #######################################################
-    def to_mem(self):
-        data = b''
-
-        # Standard position vector (rotation, pitch, yaw)
-        data += pack('<f', self.rotation)
-        data += pack('<f', self.pitch)  # Affects belt length
-        data += pack('<f', self.yaw)    # Affects belt height
-
-        # Effect ID and entry size
-        data += pack('<I', self.effect_id) # Comes after position vector
-        data += pack('<I', 40)  # Usually 40 bytes per entry
-
-        # Bottom vector
-        data += pack('<f', self.bottom[0])  # Affects escalator rotation
-        data += pack('<f', self.bottom[1])  # Affects belt length
-        data += pack('<f', self.bottom[2])  # Affects belt height
-
-        # Top vector
-        data += pack('<f', self.top[0]) # Affects escalator rotation
-        data += pack('<f', self.top[1]) # Affects belt length(?)
-        data += pack('<f', self.top[2]) # Affects belt height
-
-        # End vector
-        data += pack('<f', self.end[0]) # Affects escalator rotation
-        data += pack('<f', self.end[1]) # Affects belt length(?)
-        data += pack('<f', self.end[2]) # Affects belt height
-
-        # Direction (0 for down, 1 for up)
-        data += pack('<I', self.direction)
-
-        return data
 #######################################################
 class LightEntry:
     def __init__(self, position, effect_id, color, corona_far_clip, pointlight_range,
@@ -1509,6 +1575,77 @@ class CoverPoint2dfx:
             self.cover_type
         )
         return data
+#######################################################    
+class Escalator2DFX:
+    # See: https://gtamods.com/wiki/2d_Effect_(RW_Section)#Entry_Type_10_-_Escalator
+
+    #######################################################
+    def __init__(self, loc):
+        self.effect_id = 10  # Should go after vectors
+        self.loc = loc       # This should be the standard_pos
+        self.standart_pos = loc
+        self.bottom = Vector()
+        self.top = Vector()
+        self.end = Vector()
+        self.direction = 0
+
+    #######################################################
+    @staticmethod
+    def from_mem(loc, data, offset, size):
+        self = Escalator2DFX(loc)
+
+        # Expectation: offset already at entry start (after effect ID and size)
+
+        # Bottom (12 bytes)
+        self.bottom = Sections.read(Vector, data, offset)
+        offset += 12
+
+        # Top (12 bytes)
+        self.top = Sections.read(Vector, data, offset)
+        offset += 12
+
+        # End (12 bytes)
+        self.end = Sections.read(Vector, data, offset)
+        offset += 12
+
+        # Direction (4 bytes)
+        self.direction = unpack_from('<I', data, offset)[0]
+        offset += 4
+
+        return self
+
+    #######################################################
+    def to_mem(self):
+        data = b''
+
+        # Standard position vector (rotation, pitch, yaw)
+        data += pack('<f', self.rotation)
+        data += pack('<f', self.pitch)  # Affects belt length
+        data += pack('<f', self.yaw)    # Affects belt height
+
+        # Effect ID and entry size
+        data += pack('<I', self.effect_id) # Comes after position vector
+        data += pack('<I', 40)  # Usually 40 bytes per entry
+
+        # Bottom vector
+        data += pack('<f', self.bottom[0])  # Affects escalator rotation
+        data += pack('<f', self.bottom[1])  # Affects belt length
+        data += pack('<f', self.bottom[2])  # Affects belt height
+
+        # Top vector
+        data += pack('<f', self.top[0]) # Affects escalator rotation
+        data += pack('<f', self.top[1]) # Affects belt length(?)
+        data += pack('<f', self.top[2]) # Affects belt height
+
+        # End vector
+        data += pack('<f', self.end[0]) # Affects escalator rotation
+        data += pack('<f', self.end[1]) # Affects belt length(?)
+        data += pack('<f', self.end[2]) # Affects belt height
+
+        # Direction (0 for down, 1 for up)
+        data += pack('<I', self.direction)
+
+        return data
         
 #######################################################
 class Extension2dfx:
@@ -1541,8 +1678,13 @@ class Extension2dfx:
                 1: Particle2dfx,
                 3: PedAttractor2dfx,
                 4: SunGlare2dfx,
-                10: Escalator2DFX
+                6: EnterExit2dfx,
+                7: RoadSign2dfx,
+                8: TriggerPoint2dfx,
+                9: CoverPoint2dfx,
+                10: Escalator2DFX,
             }
+            
             
             loc = Sections.read(Vector, data, pos)
             entry_type, size = unpack_from("<II", data, pos + 12)
@@ -1929,7 +2071,6 @@ class Geometry:
         return Sections.write_chunk(data, types["Material List"])
 
     #######################################################
-    # TODO: Triangle Strips support
     def write_bin_split(self):
 
         data = b''
@@ -1946,7 +2087,8 @@ class Geometry:
                 meshes[triangle.material].append([triangle.a, triangle.b, triangle.c])
 
             for mesh in meshes:
-                meshes[mesh] = tristrip.stripify(meshes[mesh], True)[0]
+                meshes[mesh] = export_tristrips(meshes[mesh])
+
 
         else:
             for triangle in self.triangles:
@@ -1959,7 +2101,7 @@ class Geometry:
         total_indices = sum(len(triangles) for triangles in meshes.values())
         data += pack("<III", int(is_tri_strip), len(meshes), total_indices)
 
-        for mesh in meshes:
+        for mesh in sorted(meshes):
             data += pack("<II", len(meshes[mesh]), mesh)
             data += pack("<%dI" % (len(meshes[mesh])), *meshes[mesh])
 

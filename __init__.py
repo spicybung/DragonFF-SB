@@ -33,53 +33,6 @@ bl_info = {
     "description": "Importer and Exporter for GTA Formats"
 }
 
-# Operator to call the join_similar_named_meshes function
-class OBJECT_OT_join_similar_named_meshes(bpy.types.Operator):
-    bl_idname = "object.join_similar_named_meshes"
-    bl_label = "Join Similar Named Meshes"
-    bl_description = "Join meshes with similar names"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        join_similar_named_meshes(context)
-        return {'FINISHED'}
-
-# Panel to add the Join Similar Named Meshes button
-class OBJECT_PT_join_similar_meshes_panel(bpy.types.Panel):
-    bl_label = "DemonFF - Join Meshes"
-    bl_idname = "OBJECT_PT_join_similar_meshes"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = 'object'
-
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row()
-        row.operator("object.join_similar_named_meshes", text="Join Similar Meshes")
-
-def join_similar_named_meshes(context):
-    base_name_dict = {}
-    
-    for obj in context.scene.objects:
-        if obj.type == 'MESH':
-            name_parts = obj.name.split('.')
-            base_name = name_parts[0]
-            
-            if base_name not in base_name_dict:
-                base_name_dict[base_name] = []
-            
-            base_name_dict[base_name].append(obj)
-    
-    for base_name, objects in base_name_dict.items():
-        if len(objects) > 1:
-            context.view_layer.objects.active = objects[0]
-            bpy.ops.object.select_all(action='DESELECT')
-            
-            for obj in objects:
-                obj.select_set(True)
-            
-            bpy.ops.object.join()
-
 # Class list to register
 _classes = [
     gui.IMPORT_OT_dff_custom,
@@ -122,6 +75,11 @@ _classes = [
     gui.DFF_UL_AtomicItems,
     gui.SCENE_PT_dffFrames,
     gui.SCENE_PT_dffAtomics,
+    gui.SCENE_OT_dff_frame_move,
+    gui.SCENE_OT_dff_atomic_move,
+    gui.SCENE_OT_dff_update,
+    gui.SCENE_OT_select_ipl_and_import,
+    gui.SCENE_OT_ipl_select,
     gui.SCENE_OT_duplicate_all_as_collision,
     map_importer.Map_Import_Operator,
     map_exporter.SAMP_IDE_Import_Operator,
@@ -147,6 +105,7 @@ _classes = [
     gui.SAEEFFECTS_PT_Panel,
     gui.IMPORT_OT_ifp,
     gui.EXPORT_OT_ifp,
+    gui.MESSAGE_OT_missing_bones,
     gui.DFF_MT_ToolWheel
 ]
 
@@ -167,7 +126,7 @@ def register():
         subtype='FILE_PATH'
     )
 
-    pie_menus.register_keymaps()
+
 
     if (2, 80, 0) > bpy.app.version:
         bpy.types.INFO_MT_file_import.append(gui.import_dff_func)
@@ -175,6 +134,8 @@ def register():
     else:
         bpy.types.TOPBAR_MT_file_import.append(gui.import_dff_func)
         bpy.types.TOPBAR_MT_file_export.append(gui.export_dff_func)
+        
+    pie_menus.register_keymaps()
 
 
 def unregister():

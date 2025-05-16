@@ -1,7 +1,26 @@
+# DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
+# 2023 - 2025 SpicyBung
+
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os
 import bpy
-import bmesh
 import math
+import bmesh
 import mathutils
 
 from collections import OrderedDict
@@ -16,7 +35,6 @@ from ..ops import txd_importer
 from .col_importer import import_col_mem
 from ..ops.ext_2dfx_importer import ext_2dfx_importer
 from ..ops.state import State
-
 
 
 #######################################################
@@ -136,12 +154,35 @@ class dff_importer:
                         vert_index += 3
                         continue
 
+                v1 = bm.verts[f.a]
+                v2 = bm.verts[f.b]
+                v3 = bm.verts[f.c]
+
+                if v1 == v2 or v2 == v3 or v1 == v3:
+                    continue
+
+                # Skip if face already exists with the same vertex set
+                vert_set = {v1, v2, v3}
+                found = False
+                for face in bm.faces:
+                    if vert_set == set(face.verts):
+                        found = True
+                        break
+                if found:
+                    continue
+
                 try:
-                    face = bm.faces.new([
-                        bm.verts[f.a],
-                        bm.verts[f.b],
-                        bm.verts[f.c]
-                    ])
+                    face = bm.faces.new([v1, v2, v3])
+
+                    if len(mat_indices) > 0:
+                        face.material_index = mat_indices[f.material]
+
+                    for loop in face.loops:
+                        if use_face_loops:
+                            for i, layer in enumerate(geom.uv_layers):
+                                uv = layer[loop.vert.index]
+                                loop[uv_layers[i]].uv = (uv.u, 1 - uv.v)
+
 
                     if len(mat_indices) > 0:
                         face.material_index = mat_indices[f.material]
@@ -652,7 +693,7 @@ class dff_importer:
 
         frame_bone = self.frame_bones[frame_index]
         armature, bone_name = frame_bone['armature'], frame_bone['name']
-        #set_parent_bone(obj, armature, bone_name)
+        #set_parent_bone(obj, armature, bone_name) # Broken
 
     #######################################################
     def import_frames():
@@ -747,13 +788,16 @@ class dff_importer:
                 else:
                     mesh.dff.is_frame = True
 
-            # Set parent
             if frame.parent != -1:
                 if frame.parent in self.frame_bones:
                     self.link_obj_to_frame_bone(obj, frame.parent)
-
-                else:
+                elif frame.parent in self.objects:
                     obj.parent = self.objects[frame.parent]
+                else:
+                    print(f"Frame {index} ('{obj.name}') skipped — missing parent frame ID {frame.parent}") # Skip object if no frame parent
+                    continue 
+
+
 
             obj.dff.frame_index = index
 
@@ -807,8 +851,13 @@ class dff_importer:
     def import_2dfx():
         self = dff_importer
 
-        importer = ext_2dfx_importer(self.dff.ext_2dfx)
+        # Validate entries
+        for entry in self.dff.ext_2dfx.entries:
+            if entry is None or not hasattr(entry, 'effect_id'):
+                print("⚠️ Skipping 2DFX import due to invalid entry.")
+                return
 
+        importer = ext_2dfx_importer(self.dff.ext_2dfx.entries)
         for obj in importer.get_objects():
             link_object(obj, self.current_collection)
 

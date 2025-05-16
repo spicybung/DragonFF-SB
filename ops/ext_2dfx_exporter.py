@@ -1,7 +1,8 @@
 # DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
 # 2023 - 2025 SpicyBung
 
-# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
+# Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,11 +17,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from mathutils import Vector
-
 from ..gtaLib import dff
+from mathutils import Vector
 from ..gtaLib.dff import entries
-
 
 
 #######################################################
@@ -145,6 +144,31 @@ class ext_2dfx_exporter:
         entry.effect = settings.val_str24_1
 
         return entry
+    
+    #######################################################
+    def export_ped_attractor(self, obj):
+        settings = obj.dff.ext_2dfx
+
+        entry = dff.PedAttractor2dfx(obj.location)
+
+        # Construct rotation matrix from the three direction vectors
+        queue = settings.queue_dir
+        use = settings.use_dir
+        forward = settings.forward_dir
+
+        entry.rotation_matrix = [
+            queue[0], queue[1], queue[2],
+            use[0], use[1], use[2],
+            forward[0], forward[1], forward[2],
+            0.0, 0.0, 0.0  # final row usually padding
+        ]
+
+        entry.attractor_type = settings.attractor_type
+        entry.external_script = settings.script_name[:8].ljust(8, '\x00')
+        entry.ped_existing_probability = settings.ped_probability
+
+        return entry
+
 
     #######################################################
     def export_sun_glare(self, obj):
@@ -297,7 +321,10 @@ class ext_2dfx_exporter:
         functions = {
             0: self.export_light,
             1: self.export_particle,
+            3: self.export_ped_attractor,
             4: self.export_sun_glare,
+            6: self.export_enter_exit,
+            7: self.export_road_sign,
             8: self.export_trigger_point,
             9: self.export_cover_point,
             10: self.export_escalator,

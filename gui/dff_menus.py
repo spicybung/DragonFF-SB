@@ -17,11 +17,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import re
 import bpy
-from bpy.types import Menu
-import bmesh
 import gpu
+import bmesh
 import struct
+
 from .dff_ot import EXPORT_OT_dff_custom, IMPORT_OT_dff_custom, \
     IMPORT_OT_txd, \
     OBJECT_OT_dff_generate_bone_props, \
@@ -40,7 +41,6 @@ textfile = ""
 
 
 #######################################################
-#######################################################
 class OBJECT_PT_dff_misc_panel(bpy.types.Panel):
     bl_label = "DemonFF - Miscellaneous"
     bl_idname = "OBJECT_PT_dff_misc"
@@ -50,7 +50,7 @@ class OBJECT_PT_dff_misc_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Object Operations:")
+        layout.label(text="Mesh Operations:")
         layout.operator("object.join_similar_named_meshes", text="Join Similar Named Meshes")
         layout.operator("scene.duplicate_all_as_objects", text="Duplicate All as Objects")
         layout.operator("object.optimize_mesh", text="Optimize Mesh(SLOW)")
@@ -229,6 +229,10 @@ class Escalator2DFXObjectProps(bpy.types.PropertyGroup):
         
 #######################################################
 def join_similar_named_meshes(context):
+    
+    suffix_pattern = re.compile(r"(.*)\.\d{3}$")
+
+    # Build dictionary of base names to list of mesh objects
     base_name_dict = {}
 
     for obj in context.scene.objects:
@@ -243,14 +247,17 @@ def join_similar_named_meshes(context):
         if bpy.context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        target = objects[0]
+        # Prefer object with exact base name (no suffix) as join target
+        target = next((obj for obj in objects if obj.name == base_name), objects[0])
+        others = [obj for obj in objects if obj != target]
 
-        others = [obj for obj in objects[1:] if obj != target]
-
+        # Ensure all others are linked to the same collection
+        target_coll = target.users_collection[0]
         for obj in others:
-            if obj.name not in target.users_collection[0].objects:
-                target.users_collection[0].objects.link(obj)
+            if obj.name not in target_coll.objects:
+                target_coll.objects.link(obj)
 
+        # Deselect all, then select only the target and its group
         for obj in context.selected_objects:
             obj.select_set(False)
         target.select_set(True)
@@ -259,6 +266,15 @@ def join_similar_named_meshes(context):
 
         context.view_layer.objects.active = target
         bpy.ops.object.join()
+
+        # Forcefully rename object to base name
+        target.name = base_name
+
+        # Forcefully rename mesh data to base name
+        if target.type == 'MESH' and target.data:
+            target.data.name = base_name
+
+    print(f"Finished joining and renaming similar named meshes.")
 
 #######################################################
 class OBJECT_OT_join_similar_named_meshes(bpy.types.Operator):
@@ -960,7 +976,6 @@ class DFF_MT_ExportChoice(bpy.types.Menu):
                              text="DemonFF DFF (.dff/.col)")
         self.layout.operator(EXPORT_OT_col.bl_idname,
                              text="DemonFF Collision (.col)")
-        
 
 #######################################################
 def import_dff_func(self, context):
@@ -1792,11 +1807,9 @@ class SCENE_PT_dffAtomics(bpy.types.Panel):
             col = row.column()
             col.operator(SCENE_OT_dff_update.bl_idname, icon='FILE_REFRESH', text="")
 
-
 def register():
     register_saeffects()
     bpy.utils.register_class(MATERIAL_PT_dffMaterials)
-    bpy.utils.register_class(DFF_MT_ImportChoice)
     bpy.utils.register_class(DFF_MT_ExportChoice)
     bpy.utils.register_class(OBJECT_PT_dffObjects)
     bpy.utils.register_class(DFFMaterialProps)
@@ -1808,6 +1821,7 @@ def register():
     bpy.utils.register_class(SAEEFFECTS_PT_Panel)
     bpy.utils.register_class(OBJECT_OT_force_doubleside_mesh)
     bpy.utils.register_class(OBJECT_PT_dff_misc_panel)
+    bpy.utils.register_class
     bpy.utils.register_class(OBJECT_OT_recalculate_normals_outward)
     bpy.utils.register_class(OBJECT_OT_optimize_mesh)
     bpy.utils.register_class(COLLECTION_OT_nuke_matched)
@@ -1815,15 +1829,12 @@ def register():
     bpy.utils.register_class(COLLECTION_PT_custom_cleanup_panel)
     bpy.utils.register_class(SCENE_OT_assign_action_to_object)
     bpy.utils.register_class(SCENE_PT_animation_browser)
-    bpy.utils.register_class(SCENE_OT_duplicate_all_as_objects)
-    print("✅ DFF Test Pie Menu registered. Press F in 3D View.")
-   
+    bpy.utils.register_class(SCENE_OT_duplicate_all_as_objects)    
 
 
 def unregister():
     unregister_saeffects()
     bpy.utils.unregister_class(MATERIAL_PT_dffMaterials)
-    bpy.utils.unregister_class(DFF_MT_ImportChoice)
     bpy.utils.unregister_class(DFF_MT_ExportChoice)
     bpy.utils.unregister_class(OBJECT_PT_dffObjects)
     bpy.utils.unregister_class(DFFMaterialProps)
@@ -1842,7 +1853,8 @@ def unregister():
     bpy.utils.unregister_class(COLLECTION_OT_organize_scene_collection)
     bpy.utils.unregister_class(SCENE_OT_assign_action_to_object)
     bpy.utils.unregister_class(SCENE_PT_animation_browser)
-    bpy.utils.unregister_class(SCENE_OT_duplicate_all_as_objects)
+    bpy.utils.unregister_class(SCENE_OT_duplicate_all_as_objects)   
+
 
 if __name__ == "__main__":
     register()

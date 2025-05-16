@@ -1,7 +1,7 @@
 # DemonFF - Blender scripts to edit basic GTA formats to work in conjunction with SAMP/open.mp
 # 2023 - 2025 SpicyBung
 
-# This is a fork of DragonFF by Parik - maintained by Psycrow, and various others!
+# This is a fork of DragonFF by Parik27 - maintained by Psycrow, and various others!
 # Check it out at: https://github.com/Parik27/DragonFF
 
 # This program is free software: you can redistribute it and/or modify
@@ -17,16 +17,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
 import bpy
 import bmesh
-import mathutils
-import os
 import os.path
-from collections import defaultdict
+import mathutils
 
 from ..gtaLib import dff
-from ..ops.ext_2dfx_exporter import ext_2dfx_exporter
 from .col_exporter import export_col
+from collections import defaultdict
+from ..ops.ext_2dfx_exporter import ext_2dfx_exporter
+
 
 #######################################################
 def clear_extension(string):
@@ -289,8 +290,7 @@ class dff_exporter:
     parent_queue = {}
     collection = None
     export_coll = False
-    col_brightness = 1.0
-    col_light = 1.0 
+
 
     #######################################################
     @staticmethod
@@ -1019,8 +1019,11 @@ class dff_exporter:
             elif obj.type == "EMPTY":
                 self.export_empty(obj)
 
+                
+
             elif obj.type == "ARMATURE":
-                self.export_armature(obj)
+                parent = next((child for child in obj.children if child.type == "MESH"), None)
+                self.export_armature(obj, parent)
 
         atomics_data = sorted(atomics_data, key=lambda a: a[0].dff.atomic_index)
 
@@ -1031,14 +1034,6 @@ class dff_exporter:
         ext_2dfx_exporter(self.dff.ext_2dfx).export_objects(objects)
 
 
-        #Collision Attributes
-        if hasattr(obj, "dff"):
-            col_brightness = getattr(obj.dff, "col_brightness", self.col_brightness)
-            col_light = getattr(obj.dff, "col_light", self.col_light)
-        else:
-            col_brightness = self.col_brightness
-            col_light = self.col_light
-
 
         # Collision
         if self.export_coll:
@@ -1048,21 +1043,11 @@ class dff_exporter:
                 'memory'        : True,
                 'collection'    : self.collection,
                 'only_selected' : self.selected,
-                'mass_export'   : False,
-                'col_brightness': col_brightness,
-                'col_light'     : col_light
+                'mass_export'   : False
             })
 
             if len(mem) != 0:
                 self.dff.collisions = [mem]
-
-        # Use per-object collision values if exist, or fallback gracefully
-        if hasattr(obj, "dff"):
-            col_brightness = getattr(obj.dff, "col_brightness", self.col_brightness)
-            col_light = getattr(obj.dff, "col_light", self.col_light)
-        else:
-            col_brightness = self.col_brightness
-            col_light = self.col_light
 
         if name is None:
             self.dff.write_file(self.file_name, self.version )
