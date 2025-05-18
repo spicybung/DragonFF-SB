@@ -6,9 +6,41 @@
 
 DemonFF is a neat little fork of DragonFF made to further enhance your workflow for working with Renderware files, and more. Whether you're working with GTA game assets - or it happens to be another Renderware game, DemonFF simplifies the process of importing and exporting many RW types such as .DFF files, as well as .IFP animation, and map editing(.IPL/.IDE/.PWN/.LUA).
 
+#### File Types
 
+- [X] Model files
+  - [X] .DFF
+  - [X] .MDL *(Partial, experimental)*
+- [X] Texture Files
+  - [X] Import
+  - [x] Export
+- [X] Collision files (including the ones packed in dff)
+  - [X] Import
+  - [X] Export
+- [x] Map files (.ipl, .ide)
+  - [X] Import
+  - [X] Export
+- [X] Animation files ( .ifp)
+  - [X] Import
+  - [ ] Export
+- [X] IMG archives (.img)
+  - [X] Import *(Partial, experimental)*
+  - [ ] Export
 
-## Features
+#### Model Features
+
+- [X] Skinned mesh support
+- [X] Multiple UV Maps
+- [X] Mass export (.dff/.col)
+- [X] Material Effects
+  - [X] Environment/Normal Maps
+  - [ ] Dual Textures
+  - [X] UV Animation
+- [X] Rockstar Specular and Reflection Extensions
+- [X] 2D Effects *(Including escalators)*
+- [X] SAMP compatible models
+
+## Features Further Explained
 
 - **Renderware Compatibility**: DemonFF is planned to work with all Renderware .DFF files, offering support for various versions and features.
 
@@ -45,7 +77,7 @@ DemonFF is a neat little fork of DragonFF made to further enhance your workflow 
 
 ## Documentation
 
-For detailed instructions and documentation, visit the [Wiki](https://github.com/spicybung/DemonFF/wiki).
+For detailed instructions and documentation, visit the [Wiki](https://github.com/spicybung/DemonFF/wiki)(Soon for DemonFF).
 
 ## Contributing
 
@@ -63,7 +95,7 @@ This project is licensed under the GPL 3.0 License - see the [LICENSE](LICENSE) 
 - Kam, The_Hero, Goldfish, and more for their contributions to Grand Theft Auto & Renderware modding.
 - Parik27, Psycrow & many others for their work on DragonFF Blender Add-on, which without would have made this impossible.
 - Beckzy, as well as others from the SAMP/open.mp community for their testing & patience.
-- The SkR community, for their inspiration.
+- The SkR community, for their insipiration. 
 - Many other special people.
 
 
